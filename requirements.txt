@@ -1,0 +1,9 @@
+# Runtime dependencies
+openai>=1.54.0
+json-repair>=0.30.3
+tenacity>=8.2.3
+pydantic>=2.9.0
+lmstudio>=1.5.0
+
+# Dev/Test dependencies
+pytest>=8.3.0

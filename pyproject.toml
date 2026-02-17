@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "explainable-agent"
+version = "0.1.0"
+description = "Local, explainable, tool-using agent framework for LM Studio models."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [
+  { name = "Emre" }
+]
+keywords = ["agent", "llm", "lmstudio", "tool-calling", "evaluation", "xai"]
+dependencies = [
+  "openai>=1.54.0",
+  "json-repair>=0.30.3",
+  "tenacity>=8.2.3",
+  "pydantic>=2.9.0",
+  "lmstudio>=1.5.0"
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3.0"
+]
+
+[project.urls]
+Repository = "https://github.com/your-username/explainable-agent"
+Issues = "https://github.com/your-username/explainable-agent/issues"
+
+[project.scripts]
+explainable-agent = "explainable_agent.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["explainable_agent*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-ra"
+cache_dir = ".pytest_cache"
