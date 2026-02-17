@@ -40,11 +40,6 @@ except Exception:  # noqa: BLE001
     stop_after_attempt = None
     wait_exponential = None
 
-try:
-    import lmstudio as lms
-except Exception:  # noqa: BLE001
-    lms = None
-
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -57,6 +52,7 @@ from explainable_agent.eval_tool_calls import (
     score_prediction,
     score_prediction_variants,
 )
+from explainable_agent.json_utils import parse_json_object_relaxed
 
 
 DEFAULT_DATASET = Path("data/evals/hf_xlam_fc_sample.jsonl")
@@ -135,13 +131,6 @@ def parse_args() -> argparse.Namespace:
         help="Model adi (varsayilan: AGENT_MODEL veya gpt-oss-20b).",
     )
     parser.add_argument(
-        "--backend",
-        type=str,
-        choices=["openai_compat", "lmstudio_sdk"],
-        default="openai_compat",
-        help="Model cagrisi backend secimi.",
-    )
-    parser.add_argument(
         "--reasoning-effort",
         type=str,
         choices=["low", "medium", "high"],
@@ -188,8 +177,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--max-completion-tokens",
         type=int,
-        default=220,
-        help="Model cikti token ust limiti. Uzun/bozuk JSON yayilmasini azaltir.",
+        default=None,
+        help=(
+            "Model cikti token ust limiti. Verilmezse/0 ise max_tokens gonderilmez; "
+            "model cevap tamamlandiginda durur."
+        ),
     )
     return parser.parse_args()
 
@@ -231,25 +223,16 @@ def _request_completion(
     client: Any,
     model: str,
     messages: list[dict[str, str]],
-    max_completion_tokens: int,
+    max_completion_tokens: int | None,
     with_schema: bool,
-    backend: str,
 ) -> Any:
-    if backend == "lmstudio_sdk":
-        return _request_completion_lmstudio_sdk(
-            client=client,
-            model=model,
-            messages=messages,
-            max_completion_tokens=max_completion_tokens,
-            with_schema=with_schema,
-        )
-
-    base_request = {
+    base_request: dict[str, Any] = {
         "model": model,
         "messages": messages,
         "temperature": 0,
-        "max_tokens": max_completion_tokens,
     }
+    if max_completion_tokens is not None and max_completion_tokens > 0:
+        base_request["max_tokens"] = max_completion_tokens
     if with_schema:
         try:
             return _call_chat_completion(
@@ -259,47 +242,6 @@ def _request_completion(
         except Exception:
             return _call_chat_completion(client, base_request)
     return _call_chat_completion(client, base_request)
-
-
-def _request_completion_lmstudio_sdk(
-    client: Any,
-    model: str,
-    messages: list[dict[str, str]],
-    max_completion_tokens: int,
-    with_schema: bool,
-) -> Any:
-    # LM Studio SDK API varies by version. Keep this adapter permissive.
-    if lms is None:
-        raise RuntimeError(
-            "lmstudio paketi kurulu degil. `pip install lmstudio` ile kurabilirsiniz."
-        )
-
-    llm = None
-    if hasattr(client, "llm"):
-        llm = client.llm(model)
-    elif hasattr(lms, "llm"):
-        llm = lms.llm(model)
-    if llm is None:
-        raise RuntimeError("LM Studio SDK llm() arayuzu bulunamadi.")
-
-    # Prefer native Chat object; this is the most reliable path for config enforcement.
-    chat_input = _messages_to_lms_chat(messages)
-    config = {"maxTokens": max_completion_tokens, "temperature": 0}
-
-    if with_schema:
-        try:
-            response = llm.respond(
-                chat_input,
-                config=config,
-                response_format=RESPONSE_SCHEMA,
-            )
-        except Exception:  # noqa: BLE001
-            response = llm.respond(chat_input, config=config)
-    else:
-        response = llm.respond(chat_input, config=config)
-
-    content = _extract_lmstudio_response_text(response)
-    return {"choices": [{"message": {"content": content}}]}
 
 
 def _response_content(response: Any) -> str:
@@ -320,36 +262,6 @@ def _response_content(response: Any) -> str:
     return ""
 
 
-def _messages_to_chat_payload(messages: list[dict[str, str]]) -> dict[str, Any]:
-    history: list[dict[str, str]] = []
-    for msg in messages:
-        role = str(msg.get("role", "user")).strip().lower()
-        if role not in {"system", "user", "assistant"}:
-            role = "user"
-        content = str(msg.get("content", "")).strip()
-        if content:
-            history.append({"role": role, "content": content})
-    return {"messages": history}
-
-
-def _messages_to_lms_chat(messages: list[dict[str, str]]) -> Any:
-    if lms is None or not hasattr(lms, "Chat"):
-        return _messages_to_chat_payload(messages)
-    chat = lms.Chat()
-    for msg in messages:
-        role = str(msg.get("role", "user")).strip().lower()
-        content = str(msg.get("content", "")).strip()
-        if not content:
-            continue
-        if role == "system":
-            chat.add_system_prompt(content)
-        elif role == "assistant":
-            chat.add_assistant_response(content)
-        else:
-            chat.add_user_message(content)
-    return chat
-
-
 def _messages_to_prompt(messages: list[dict[str, str]]) -> str:
     lines: list[str] = []
     for msg in messages:
@@ -359,30 +271,6 @@ def _messages_to_prompt(messages: list[dict[str, str]]) -> str:
             lines.append(f"{role}:\n{content}")
     lines.append("ASSISTANT:")
     return "\n\n".join(lines)
-
-
-def _extract_lmstudio_response_text(response: Any) -> str:
-    if isinstance(response, str):
-        return response
-    if hasattr(response, "structured"):
-        try:
-            structured = getattr(response, "structured")
-            if isinstance(structured, dict):
-                return json.dumps(structured, ensure_ascii=False)
-            if structured is not None:
-                return str(structured)
-        except Exception:  # noqa: BLE001
-            pass
-    for attr in ("content", "text", "response", "output"):
-        if hasattr(response, attr):
-            value = getattr(response, attr)
-            if isinstance(value, str):
-                return value
-    # SDK can return OpenAI-style objects in some builds.
-    try:
-        return str(response.choices[0].message.content)
-    except Exception:  # noqa: BLE001
-        return str(response)
 
 
 def _normalize_tool_name(name: str) -> str:
@@ -623,7 +511,6 @@ def _request_repaired_output(
     previous_output: str,
     reasoning_effort: str,
     max_completion_tokens: int,
-    backend: str,
 ) -> str:
     messages = _build_repair_messages(
         sample=sample,
@@ -636,26 +523,8 @@ def _request_repaired_output(
         messages=messages,
         max_completion_tokens=max_completion_tokens,
         with_schema=True,
-        backend=backend,
     )
     return _response_content(response)
-
-
-def _extract_first_json_object(text: str) -> str | None:
-    stack = 0
-    start = -1
-    for idx, ch in enumerate(text):
-        if ch == "{":
-            if stack == 0:
-                start = idx
-            stack += 1
-        elif ch == "}":
-            if stack > 0:
-                stack -= 1
-                if stack == 0 and start != -1:
-                    return text[start : idx + 1]
-    match = re.search(r"\{.*\}", text, flags=re.DOTALL)
-    return match.group(0) if match else None
 
 
 def _parse_tool_calls_from_text(text: str) -> tuple[list[dict[str, Any]], bool]:
@@ -663,17 +532,7 @@ def _parse_tool_calls_from_text(text: str) -> tuple[list[dict[str, Any]], bool]:
     if not cleaned:
         return [], True
 
-    payload: Any = None
-    try:
-        payload = json.loads(cleaned)
-    except json.JSONDecodeError:
-        candidate = _extract_first_json_object(cleaned)
-        if candidate:
-            try:
-                payload = json.loads(candidate)
-            except json.JSONDecodeError:
-                payload = None
-
+    payload, _ = parse_json_object_relaxed(cleaned)
     return _parse_tool_calls_from_payload(payload)
 
 
@@ -1145,20 +1004,14 @@ def main() -> int:
         print(f"Degerlendirme dataseti bos: {dataset_path}")
         return 1
 
-    if args.backend == "openai_compat":
-        client: Any = OpenAI(base_url=settings.base_url, api_key=settings.api_key)
-        available = [m.id for m in client.models.list().data]
-        if requested_model not in available:
-            print(
-                f"Istenen model yok: {requested_model}. "
-                f"Yuklu modeller: {', '.join(available)}"
-            )
-            return 1
-    else:
-        if lms is None:
-            print("lmstudio paketi kurulu degil. `pip install lmstudio` calistirin.")
-            return 1
-        client = lms
+    client: Any = OpenAI(base_url=settings.base_url, api_key=settings.api_key)
+    available = [m.id for m in client.models.list().data]
+    if requested_model not in available:
+        print(
+            f"Istenen model yok: {requested_model}. "
+            f"Yuklu modeller: {', '.join(available)}"
+        )
+        return 1
 
     results: list[dict[str, Any]] = []
     error_counter: Counter[str] = Counter()
@@ -1187,7 +1040,6 @@ def main() -> int:
             messages=messages,
             max_completion_tokens=args.max_completion_tokens,
             with_schema=True,
-            backend=args.backend,
         )
 
         raw_output = _response_content(response)
@@ -1240,7 +1092,6 @@ def main() -> int:
                     previous_output=repair_input,
                     reasoning_effort=reasoning_effort,
                     max_completion_tokens=args.max_completion_tokens,
-                    backend=args.backend,
                 )
                 repaired_calls, repaired_parse_error = _parse_tool_calls_from_text(
                     repaired_output
@@ -1381,12 +1232,30 @@ def main() -> int:
 
     total = len(samples)
     argument_error_breakdown = _build_argument_error_breakdown(results)
+    failure_patterns = _build_failure_patterns(results, top_k=3)
+    actionable_plan = _build_actionable_plan(
+        summary_metrics={
+            "exact_match_accuracy": round(exact / total, 4),
+            "name_match_accuracy": round(name_match_total / total, 4),
+            "call_count_accuracy": round(call_count_match_total / total, 4),
+            "argument_match_rate": round(
+                (arg_match_total / expected_call_total) if expected_call_total else 0.0, 4
+            ),
+        },
+        failure_patterns=failure_patterns,
+        guard_metrics={
+            "dropped_unknown_tool_calls": guard_unknown_drop_total,
+            "missing_required_keys": guard_missing_required_total,
+            "dropped_by_max_tool_calls": guard_max_call_drop_total,
+            "schema_validation_errors": guard_schema_validation_error_total,
+        },
+    )
     summary = {
         "evaluated_at_utc": datetime.now(timezone.utc).isoformat(),
         "dataset_path": str(dataset_path),
         "dataset_format": dataset_format,
         "answer_path": str(answer_path) if answer_path else None,
-        "backend": args.backend,
+        "backend": "openai_compat",
         "model": requested_model,
         "reasoning_effort": reasoning_effort,
         "sample_count": total,
@@ -1402,6 +1271,8 @@ def main() -> int:
         ),
         "error_breakdown": dict(error_counter),
         "argument_error_breakdown": argument_error_breakdown,
+        "top_failure_patterns": failure_patterns,
+        "actionable_plan": actionable_plan,
         "repair": {
             "attempted_samples": repair_attempted_total,
             "successful_repairs": repair_success_total,
@@ -1477,6 +1348,30 @@ def _build_report(summary: dict[str, Any], results: list[dict[str, Any]]) -> str
     lines.append(f"- Tool name accuracy: `{summary['name_match_accuracy']}`")
     lines.append(f"- Call count accuracy: `{summary['call_count_accuracy']}`")
     lines.append(f"- Argument match rate: `{summary['argument_match_rate']}`")
+    lines.append("")
+    lines.append("## Actionable Plan")
+    lines.append("")
+    plan = summary.get("actionable_plan", [])
+    if not plan:
+        lines.append("- Ek aksiyon onerisi yok.")
+    else:
+        for item in plan:
+            lines.append(f"- {item}")
+    lines.append("")
+    lines.append("## Top Failure Patterns")
+    lines.append("")
+    patterns = summary.get("top_failure_patterns", [])
+    if not patterns:
+        lines.append("- Pattern bulunamadi.")
+    else:
+        for pattern in patterns:
+            lines.append(
+                "- "
+                f"{pattern.get('error_type')} | "
+                f"name={pattern.get('name_match')} count={pattern.get('call_count_match')} "
+                f"parse={pattern.get('parse_error')} | "
+                f"adet={pattern.get('count')}"
+            )
     lines.append("")
     lines.append("## Hata Dagilimi")
     lines.append("")
@@ -1579,6 +1474,77 @@ def _build_argument_error_breakdown(results: list[dict[str, Any]]) -> dict[str, 
             if predicted_args.get(key) != value:
                 breakdown[key] += 1
     return dict(breakdown)
+
+
+def _build_failure_patterns(
+    results: list[dict[str, Any]],
+    top_k: int = 3,
+) -> list[dict[str, Any]]:
+    counter: Counter[tuple[str, bool, bool, bool]] = Counter()
+    for row in results:
+        if row.get("exact_match"):
+            continue
+        key = (
+            str(row.get("error_type") or "unknown"),
+            bool(row.get("name_match")),
+            bool(row.get("call_count_match")),
+            bool(row.get("parse_error")),
+        )
+        counter[key] += 1
+    top = counter.most_common(top_k)
+    return [
+        {
+            "error_type": key[0],
+            "name_match": key[1],
+            "call_count_match": key[2],
+            "parse_error": key[3],
+            "count": count,
+        }
+        for key, count in top
+    ]
+
+
+def _build_actionable_plan(
+    summary_metrics: dict[str, float],
+    failure_patterns: list[dict[str, Any]],
+    guard_metrics: dict[str, int],
+) -> list[str]:
+    actions: list[str] = []
+    pattern_action: str | None = None
+    name_acc = float(summary_metrics.get("name_match_accuracy", 0.0))
+    count_acc = float(summary_metrics.get("call_count_accuracy", 0.0))
+    arg_rate = float(summary_metrics.get("argument_match_rate", 0.0))
+
+    if name_acc < 0.8:
+        actions.append(
+            "Tool adi secim hatasi yuksek: prompt'a yalnizca tool adini kopyalayip kullanma kurali ekle ve close-match otomatik duzeltmeyi acikca logla."
+        )
+    if count_acc < 0.8 or int(guard_metrics.get("dropped_by_max_tool_calls", 0)) > 0:
+        actions.append(
+            "Tool sayisi hatasi var: max-tool-calls degerini dataset yapisina gore ayarla ve coklu-cagri gereken ornekleri ayri senaryoda degerlendir."
+        )
+    if arg_rate < 0.75 or int(guard_metrics.get("missing_required_keys", 0)) > 0:
+        actions.append(
+            "Arguman kalitesi dusuk: required alanlari once doldur sonra optional alanlari ekle seklinde iki adimli arguman olusturma kuralini zorunlu yap."
+        )
+
+    if failure_patterns:
+        top = failure_patterns[0]
+        top_error = str(top.get("error_type", "unknown"))
+        pattern_action = (
+            f"En sik pattern `{top_error}`: bu pattern icin hedefli 10 orneklik mini regression seti olusturup her degisiklikte otomatik kos."
+        )
+
+    if int(guard_metrics.get("schema_validation_errors", 0)) > 0:
+        actions.append(
+            "Schema ihlali goruluyor: schema-validator hatalarini model geri beslemesine tek satir neden olarak enjekte et."
+        )
+
+    # Keep output concise and realistic; always include top-pattern action when available.
+    if pattern_action:
+        primary = actions[:2]
+        return [*primary, pattern_action]
+    return actions[:3]
 
 
 def _resolve_dataset_format(dataset_path: Path, requested_format: str) -> str:

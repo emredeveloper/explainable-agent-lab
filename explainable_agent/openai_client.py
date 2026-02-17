@@ -36,7 +36,8 @@ DECISION_SCHEMA = {
     },
 }
 
-class LMStudioClient:
+
+class OpenAICompatClient:
     def __init__(self, base_url: str, api_key: str) -> None:
         self.client = OpenAI(base_url=base_url, api_key=api_key)
 
@@ -48,8 +49,7 @@ class LMStudioClient:
         model_ids = self.list_models()
         if not model_ids:
             raise RuntimeError(
-                "LM Studio API ulasilabilir ama yuklu model yok. "
-                "Modeli LM Studio'da yukleyip tekrar deneyin."
+                "API ulasilabilir ama yuklu model yok. Sunucuda model yukleyip tekrar deneyin."
             )
         if requested_model in model_ids:
             return requested_model
@@ -59,8 +59,7 @@ class LMStudioClient:
             return partial_matches[0]
         available = ", ".join(model_ids)
         raise RuntimeError(
-            f"Istenen model bulunamadi: '{requested_model}'. "
-            f"Yuklu modeller: {available}"
+            f"Istenen model bulunamadi: '{requested_model}'. Yuklu modeller: {available}"
         )
 
     def get_decision(
@@ -144,7 +143,7 @@ Yanit kisa, net ve Turkce olsun."""
         except json.JSONDecodeError:
             pass
 
-        candidate = LMStudioClient._extract_first_json_object(content)
+        candidate = OpenAICompatClient._extract_first_json_object(content)
         if candidate:
             try:
                 data = json.loads(candidate)
@@ -156,7 +155,6 @@ Yanit kisa, net ve Turkce olsun."""
 
     @staticmethod
     def _extract_first_json_object(text: str) -> str | None:
-        # Fallback parser for models that return prose around JSON.
         stack = 0
         start = -1
         for idx, char in enumerate(text):
@@ -169,7 +167,6 @@ Yanit kisa, net ve Turkce olsun."""
                     stack -= 1
                     if stack == 0 and start != -1:
                         return text[start : idx + 1]
-        # Last fallback: regex for simple single object.
         match = re.search(r"\{.*\}", text, flags=re.DOTALL)
         return match.group(0) if match else None
 

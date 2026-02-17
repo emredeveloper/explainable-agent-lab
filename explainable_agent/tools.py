@@ -6,10 +6,11 @@ import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
 
 
 ToolFn = Callable[[str, Path], str]
+TOOL_SCHEMA_VERSION = "tool-spec-v1"
 IGNORED_DIRS = {
     ".git",
     ".venv",
@@ -411,9 +412,25 @@ AVAILABLE_TOOLS: dict[str, ToolSpec] = {
 
 def tool_catalog_text() -> str:
     lines: list[str] = []
+    lines.append(f"[schema_version={TOOL_SCHEMA_VERSION}]")
     for spec in AVAILABLE_TOOLS.values():
         lines.append(f"- {spec.name}: {spec.description} ({spec.usage_hint})")
     return "\n".join(lines)
+
+
+def tool_catalog_payload() -> dict[str, Any]:
+    return {
+        "schema_version": TOOL_SCHEMA_VERSION,
+        "tools": [
+            {
+                "name": spec.name,
+                "description": spec.description,
+                "usage_hint": spec.usage_hint,
+                "requires_input": spec.requires_input,
+            }
+            for spec in AVAILABLE_TOOLS.values()
+        ],
+    }
 
 
 def available_tool_names() -> set[str]:

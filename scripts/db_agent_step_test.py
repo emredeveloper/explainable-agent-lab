@@ -58,12 +58,12 @@ def main() -> int:
 
     code, out, _ = run_cmd(
         [PYTHON, "-m", "explainable_agent.cli", "--list-models"],
-        "Adim 1: LM Studio Model Kontrolu",
+        "Adim 1: Model Kontrolu",
     )
     if code != 0 or MODEL not in out:
-        print(f"HATA: '{MODEL}' modeli LM Studio listesinde bulunamadi.")
+        print(f"HATA: '{MODEL}' modeli sunucu listesinde bulunamadi.")
         failed = True
-        print("\nSONUC: BASARISIZ (LM Studio baglantisi veya model yuklemesi gerekli)")
+        print("\nSONUC: BASARISIZ (API baglantisi veya model yuklemesi gerekli)")
         return 1
 
     common = [

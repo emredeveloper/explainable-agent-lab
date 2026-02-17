@@ -6,9 +6,15 @@ from typing import Any
 from uuid import uuid4
 
 from .config import Settings
-from .lmstudio_client import LMStudioClient
+from .openai_client import OpenAICompatClient
 from .schemas import Decision, FaithfulnessCheck, RunTrace, StepTrace
-from .tools import available_tool_names, run_tool, tool_catalog_text, tools_without_input
+from .tools import (
+    available_tool_names,
+    run_tool,
+    tool_catalog_payload,
+    tool_catalog_text,
+    tools_without_input,
+)
 
 
 def _utc_now() -> str:
@@ -259,6 +265,7 @@ def _build_step_audit(
     source: str,
     notes: list[str] | None = None,
     tool_output: str | None = None,
+    why_tool: str | None = None,
 ) -> dict[str, Any]:
     warnings: list[str] = []
     if decision.confidence < 0.4:
@@ -274,15 +281,16 @@ def _build_step_audit(
         warnings.append("Arac calismasi hata dondu.")
     return {
         "source": source,
+        "why_tool": why_tool or "",
         "notes": list(notes or []),
         "warnings": warnings,
     }
 
 
 class ExplainableAgent:
-    def __init__(self, settings: Settings, client: LMStudioClient | None = None) -> None:
+    def __init__(self, settings: Settings, client: OpenAICompatClient | None = None) -> None:
         self.settings = settings
-        self.client = client or LMStudioClient(
+        self.client = client or OpenAICompatClient(
             base_url=settings.base_url, api_key=settings.api_key
         )
 
@@ -299,6 +307,7 @@ class ExplainableAgent:
                 "content": (
                     f"Kullanici gorevi:\n{task}\n\n"
                     f"Kullanilabilir araclar:\n{tool_catalog_text()}\n\n"
+                    f"Arac katalog JSON'u:\n{tool_catalog_payload()}\n\n"
                     "Gerekirse her adimda yalnizca bir arac sec."
                 ),
             }
@@ -336,6 +345,7 @@ class ExplainableAgent:
                     latency_ms=0,
                     audit={
                         "source": "explicit_request",
+                        "why_tool": "Kullanicinin metninde arac adi acikca gecti.",
                         "notes": [
                             "Gorevde acik arac adi bulundugu icin LLM adimi atlandi."
                         ],
@@ -433,6 +443,11 @@ class ExplainableAgent:
                             source=decision_source,
                             notes=decision_notes,
                             tool_output=tool_output,
+                            why_tool=(
+                                f"{decision.tool_name} secildi; gerekce: {decision.rationale}"
+                                if decision.tool_name
+                                else ""
+                            ),
                         ),
                     )
                 )
@@ -461,6 +476,7 @@ class ExplainableAgent:
                         source=decision_source,
                         notes=decision_notes,
                         tool_output=None,
+                        why_tool="Final answer secildi, yeni tool cagrisi gerekli degil.",
                     ),
                 )
             )

@@ -54,8 +54,8 @@ class Settings:
     @classmethod
     def from_env(cls) -> "Settings":
         return cls(
-            base_url=os.getenv("LMSTUDIO_BASE_URL", "http://localhost:1234/v1"),
-            api_key=os.getenv("LMSTUDIO_API_KEY", "lm-studio"),
+            base_url=os.getenv("OPENAI_BASE_URL", "http://localhost:1234/v1"),
+            api_key=os.getenv("OPENAI_API_KEY", "local"),
             requested_model=os.getenv("AGENT_MODEL", "gpt-oss-20b"),
             reasoning_effort=os.getenv("AGENT_REASONING_EFFORT", "high"),
             max_steps=int(os.getenv("AGENT_MAX_STEPS", "6")),

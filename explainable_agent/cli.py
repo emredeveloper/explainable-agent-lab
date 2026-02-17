@@ -7,13 +7,13 @@ from pathlib import Path
 
 from .agent import ExplainableAgent
 from .config import Settings
-from .lmstudio_client import LMStudioClient
+from .openai_client import OpenAICompatClient
 from .report import write_run_artifacts
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Aciklanabilir Ajan MVP (LM Studio yerel LLM)."
+        description="Aciklanabilir Ajan MVP (OpenAI-compatible yerel LLM)."
     )
     parser.add_argument("--task", type=str, help="Ajan icin gorev metni.")
     parser.add_argument(
@@ -39,13 +39,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--base-url",
         type=str,
         default=None,
-        help="LM Studio API taban adresi, ornek: http://localhost:1234/v1",
+        help="OpenAI-compatible API taban adresi, ornek: http://localhost:1234/v1",
     )
     parser.add_argument(
         "--api-key",
         type=str,
         default=None,
-        help="LM Studio API anahtari (varsayilan: lm-studio).",
+        help="API anahtari (varsayilan: local).",
     )
     parser.add_argument(
         "--workspace",
@@ -68,7 +68,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--list-models",
         action="store_true",
-        help="LM Studio'da yuklu modelleri listele.",
+        help="Sunucuda yuklu modelleri listele.",
     )
     return parser
 
@@ -95,7 +95,7 @@ def main() -> int:
     if args.runs_dir:
         settings = settings.with_overrides(runs_dir=Path(args.runs_dir).resolve())
 
-    client = LMStudioClient(base_url=settings.base_url, api_key=settings.api_key)
+    client = OpenAICompatClient(base_url=settings.base_url, api_key=settings.api_key)
 
     if args.list_models:
         try:
@@ -104,7 +104,7 @@ def main() -> int:
             print(f"Model listesi alinamadi: {exc}")
             return 1
         if not model_ids:
-            print("LM Studio'da yuklu model yok.")
+            print("Sunucuda yuklu model yok.")
             return 0
         print("Yuklu modeller:")
         for mid in model_ids:

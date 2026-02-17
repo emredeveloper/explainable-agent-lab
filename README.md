@@ -1,6 +1,6 @@
 # Explainable Agent Lab
 
-Local-first, explainable agent framework for LM Studio models.
+Local-first, explainable agent framework for OpenAI-compatible models.
 
 This repository is built for two things:
 1. Running a tool-using agent with transparent step-by-step traces.
@@ -53,7 +53,7 @@ Copy `.env.example` and adjust values if needed.
 
 ## Quick Start
 
-1. Open LM Studio local server.
+1. Open your local OpenAI-compatible server.
 2. Load a model (e.g. `gpt-oss-20b`).
 3. Default endpoint is `http://localhost:1234/v1`.
 
@@ -114,10 +114,18 @@ BFCL SQL:
 python scripts/eval_hf_tool_calls.py --dataset data/evals/bfcl_sql/BFCL_v3_sql.json --model gpt-oss-20b --reasoning-effort high
 ```
 
+SWE-bench Lite readiness (scalable adapter path):
+
+```bash
+python scripts/eval_swebench_readiness.py --dataset data/evals/swebench_lite_sample.jsonl --model gpt-oss-20b --limit 10
+```
+
 Outputs are written to:
 - `runs/evals/hf_tool_eval_<timestamp>/summary.json`
 - `runs/evals/hf_tool_eval_<timestamp>/details.json`
 - `runs/evals/hf_tool_eval_<timestamp>/report.md`
+- `runs/evals/swebench_readiness_<timestamp>/summary.json`
+- `runs/evals/swebench_readiness_<timestamp>/details.json`
 
 ## Prepublish Check
 
@@ -129,8 +137,8 @@ python scripts/prepublish_check.py
 
 ## Configuration
 
-- `LMSTUDIO_BASE_URL` (default: `http://localhost:1234/v1`)
-- `LMSTUDIO_API_KEY` (default: `lm-studio`)
+- `OPENAI_BASE_URL` (default: `http://localhost:1234/v1`)
+- `OPENAI_API_KEY` (default: `local`)
 - `AGENT_MODEL` (default: `gpt-oss-20b`)
 - `AGENT_REASONING_EFFORT` (default: `high`)
 - `AGENT_MAX_STEPS` (default: `6`)

@@ -6,8 +6,8 @@
   - Main orchestration loop
   - Decision -> tool call -> next decision flow
   - Trace/audit generation
-- `explainable_agent/lmstudio_client.py`
-  - LM Studio OpenAI-compatible client wrapper
+- `explainable_agent/openai_client.py`
+  - OpenAI-compatible client wrapper
   - Structured decision parsing
 - `explainable_agent/tools.py`
   - Built-in tools and guards (file/sql/math)

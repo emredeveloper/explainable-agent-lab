@@ -45,7 +45,7 @@ def test_write_run_artifacts(tmp_path: Path) -> None:
     assert full_trace_path.exists()
 
     payload = json.loads(trace_path.read_text(encoding="utf-8"))
-    assert payload["trace_version"] == "compact-v1"
+    assert payload["trace_version"] == "compact-v2"
     assert payload["steps"][0]["action"] == "final_answer"
     assert "model_output" not in json.dumps(payload)
     assert "Aciklanabilir Ajan Calisma Raporu" in report_path.read_text(encoding="utf-8")

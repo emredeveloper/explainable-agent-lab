@@ -36,6 +36,7 @@ def _to_compact_trace(trace: RunTrace) -> dict[str, object]:
                 "step": step.step,
                 "action": step.decision.action,
                 "source": step.audit.get("source"),
+                "why_tool": _compact(step.audit.get("why_tool", ""), 180),
                 "warnings": list(step.audit.get("warnings", [])),
                 "tool": step.decision.tool_name,
                 "tool_input": _compact(step.decision.tool_input or "", 120)
@@ -50,7 +51,7 @@ def _to_compact_trace(trace: RunTrace) -> dict[str, object]:
             }
         )
     return {
-        "trace_version": "compact-v1",
+        "trace_version": "compact-v2",
         "run_id": trace.run_id,
         "task": trace.task,
         "model": {
@@ -113,6 +114,8 @@ def _to_markdown_report(trace: RunTrace) -> str:
         lines.append(f"- Eylem: `{step.decision.action}`")
         if step.audit.get("source"):
             lines.append(f"- Karar kaynagi: `{step.audit.get('source')}`")
+        if step.audit.get("why_tool"):
+            lines.append(f"- Neden bu arac/aksiyon: {step.audit.get('why_tool')}")
         lines.append(f"- Gerekce: {step.decision.rationale}")
         lines.append(f"- Guven: `{step.decision.confidence:.2f}`")
         lines.append(f"- Kanit: {', '.join(step.decision.evidence)}")
