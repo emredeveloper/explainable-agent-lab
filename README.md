@@ -1,37 +1,39 @@
-# Explainable Agent (Local LM Studio)
+# Explainable Agent Lab
 
-Local LLM ile calisan, arac kullanimi ve karar izini raporlayan aciklanabilir agent kutuphanesi.
+Local-first, explainable agent framework for LM Studio models.
 
-Bu repo iki hedefe odaklanir:
-1. Uretim benzeri, izlenebilir agent calistirma akisi.
-2. Tool-calling kalitesini dataset ile olcen eval hatti.
+This repository is built for two things:
+1. Running a tool-using agent with transparent step-by-step traces.
+2. Evaluating tool-calling quality on benchmark-style datasets.
 
-## Ozellikler
+## What You Get
 
-- Adim adim karar izi: `action`, `confidence`, `rationale`, `evidence`
-- Tool cagrisi ve sonuc kaydi
-- Faithfulness metrikleri:
-  - alternatif cevap benzerligi
-  - tool-support skoru
-- Cikti artefact'lari:
-  - `trace.json` (kisa)
-  - `trace_full.json` (detayli)
-  - `report.md`
-- Tool-calling eval:
+- Structured agent decisions per step:
+  - `action`, `confidence`, `rationale`, `evidence`
+- Tool execution traces with audit metadata
+- Faithfulness signals:
+  - alternative answer similarity
+  - tool-support score
+- Run artifacts:
+  - `trace.json` (compact)
+  - `trace_full.json` (full payload)
+  - `report.md` (human-readable)
+- Evaluation pipeline with:
   - random/head sampling
-  - parse/repair/guard istatistikleri
-  - arguman hata dagilimi
+  - parse/repair/guard stats
+  - argument-level error breakdown
 
-## Proje Yapisi
+## Repository Layout
 
-- `explainable_agent/`: kutuphane kodu
-- `scripts/`: eval ve smoke-test scriptleri
-- `tests/`: birim testler
-- `data/evals/`: ornek ve benchmark datasetleri
+- `explainable_agent/`: core library
+- `scripts/`: evaluation and utility scripts
+- `tests/`: unit tests
+- `data/evals/`: sample and benchmark datasets
+- `docs/ARCHITECTURE.md`: system overview
 
-## Kurulum
+## Installation
 
-### Secenek A: Gelistirme (requirements)
+### Option A: Requirements-based setup
 
 ```bash
 python -m venv .venv
@@ -39,7 +41,7 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-### Secenek B: Paket olarak (pyproject)
+### Option B: Editable package install (recommended)
 
 ```bash
 python -m venv .venv
@@ -47,34 +49,33 @@ python -m venv .venv
 pip install -e .[dev]
 ```
 
-`.env.example` dosyasini kopyalayip kendi ortam degiskenlerini ayarlayabilirsin.
+Copy `.env.example` and adjust values if needed.
 
-## Hemen Basla
+## Quick Start
 
-LM Studio:
-1. Local server ac.
-2. Bir model yukle (ornek: `gpt-oss-20b`).
-3. Endpoint varsayilan: `http://localhost:1234/v1`
+1. Open LM Studio local server.
+2. Load a model (e.g. `gpt-oss-20b`).
+3. Default endpoint is `http://localhost:1234/v1`.
 
-Model listesini kontrol et:
+List available models:
 
 ```bash
 python -m explainable_agent.cli --list-models
 ```
 
-Agent calistir:
+Run the agent:
 
 ```bash
 python -m explainable_agent.cli --model gpt-oss-20b --reasoning-effort high --task "calculate_math: (215*4)-12"
 ```
 
-Konsol script ile:
+Or via console entrypoint:
 
 ```bash
 explainable-agent --model gpt-oss-20b --task "sqlite_init_demo"
 ```
 
-## Yerlesik Tool'lar
+## Built-in Tools
 
 - `calculate_math`
 - `read_text_file`
@@ -86,16 +87,16 @@ explainable-agent --model gpt-oss-20b --task "sqlite_init_demo"
 - `sqlite_query`
 - `sqlite_execute`
 
-SQLite ornek:
+SQLite example:
 
 ```bash
 python -m explainable_agent.cli --sqlite-db data/demo.db --task "sqlite_init_demo"
 python -m explainable_agent.cli --sqlite-db data/demo.db --task "sqlite_query: SELECT name, city FROM customers ORDER BY id;"
 ```
 
-## Eval Kullanim
+## Evaluation
 
-Mini eval:
+Mini sample run:
 
 ```bash
 python scripts/eval_hf_tool_calls.py --dataset data/evals/hf_xlam_fc_sample.jsonl --model gpt-oss-20b --reasoning-effort high --limit 10
@@ -113,23 +114,20 @@ BFCL SQL:
 python scripts/eval_hf_tool_calls.py --dataset data/evals/bfcl_sql/BFCL_v3_sql.json --model gpt-oss-20b --reasoning-effort high
 ```
 
-Eval ciktilari:
-
+Outputs are written to:
 - `runs/evals/hf_tool_eval_<timestamp>/summary.json`
 - `runs/evals/hf_tool_eval_<timestamp>/details.json`
 - `runs/evals/hf_tool_eval_<timestamp>/report.md`
 
 ## Prepublish Check
 
-GitHub'a push etmeden once:
+Before publishing:
 
 ```bash
 python scripts/prepublish_check.py
 ```
 
-Bu script derleme ve cekirdek testleri calistirir.
-
-## Konfigurasyon
+## Configuration
 
 - `LMSTUDIO_BASE_URL` (default: `http://localhost:1234/v1`)
 - `LMSTUDIO_API_KEY` (default: `lm-studio`)
@@ -141,14 +139,10 @@ Bu script derleme ve cekirdek testleri calistirir.
 - `AGENT_TEMPERATURE` (default: `0.2`)
 - `AGENT_SQLITE_DB` (default: `data/agent.db`)
 
-## Portfoy Notu
+## Status
 
-Bu repo su an `v0.1.0` deneysel kutuphane seviyesindedir:
-- Yerel model + explainability + eval bir arada
-- Tekrar edilebilir benchmark akisi
-- Arac guvenlik kontrolleri (path/SQL guard)
-- Mimari ozeti: `docs/ARCHITECTURE.md`
+Current release: `v0.1.0` (experimental but usable)
 
-## Lisans
+## License
 
 MIT
