@@ -19,9 +19,11 @@ This repository is built for two things:
   - `trace_full.json` (full payload)
   - `report.md` (human-readable)
 - Evaluation pipeline with:
+  - dataset adapters (`jsonl`, `bfcl_sql`, `swebench_lite`)
   - random/head sampling
   - parse/repair/guard stats
   - argument-level error breakdown
+  - robust JSON parsing/repair for malformed model outputs
 
 ## Repository Layout
 
@@ -96,6 +98,10 @@ python -m explainable_agent.cli --sqlite-db data/demo.db --task "sqlite_query: S
 
 ## Evaluation
 
+Note on output length:
+- `--max-completion-tokens` is optional.
+- If omitted (or set to `0`), evaluators do not send `max_tokens`; generation ends naturally when the model finishes.
+
 Mini sample run:
 
 ```bash
@@ -117,7 +123,13 @@ python scripts/eval_hf_tool_calls.py --dataset data/evals/bfcl_sql/BFCL_v3_sql.j
 SWE-bench Lite readiness (scalable adapter path):
 
 ```bash
-python scripts/eval_swebench_readiness.py --dataset data/evals/swebench_lite_sample.jsonl --model gpt-oss-20b --limit 10
+python scripts/eval_swebench_readiness.py --dataset data/evals/swebench_lite_test.jsonl --model gpt-oss-20b --limit 10
+```
+
+Download real SWE-bench Lite test split:
+
+```bash
+python -c "from datasets import load_dataset; ds=load_dataset('SWE-bench/SWE-bench_Lite', split='test'); ds.to_json('data/evals/swebench_lite_test.jsonl', orient='records', lines=True, force_ascii=False)"
 ```
 
 Outputs are written to:
