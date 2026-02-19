@@ -57,19 +57,19 @@ def _safe_resolve_path(workspace_root: Path, input_path: str) -> Path:
     if candidate == workspace:
         return candidate
     if workspace not in candidate.parents:
-        raise ValueError("Yol, calisma klasoru disina cikiyor.")
+        raise ValueError("Path escapes workspace directory.")
     return candidate
 
 
 @define_tool(
     name="calculate_math",
-    description="Temel aritmetik ifadeyi hesaplar.",
-    usage_hint="Girdi bir ifade metnidir, ornek: (12.5*4)-7"
+    description="Calculates a basic arithmetic expression.",
+    usage_hint="Input is an expression string, e.g., (12.5*4)-7"
 )
 def calculate_math(expression: str, _: Path) -> str:
     expression = expression.strip()
     if not expression:
-        return "ERROR: bos ifade"
+        return "ERROR: empty expression"
 
     allowed_bin_ops = {
         ast.Add: lambda a, b: a + b,
@@ -92,7 +92,7 @@ def calculate_math(expression: str, _: Path) -> str:
             return allowed_bin_ops[type(node.op)](
                 eval_node(node.left), eval_node(node.right)
             )
-        raise ValueError("Yalnizca temel aritmetik islemler desteklenir.")
+        raise ValueError("Only basic arithmetic operations are supported.")
 
     try:
         tree = ast.parse(expression, mode="eval")
@@ -104,8 +104,8 @@ def calculate_math(expression: str, _: Path) -> str:
 
 @define_tool(
     name="read_text_file",
-    description="Calisma klasorundeki UTF-8 metin dosyasini okur.",
-    usage_hint="Girdi goreli dosya yoludur, ornek: docs/notes.txt"
+    description="Reads a UTF-8 text file from the workspace.",
+    usage_hint="Input is a relative file path, e.g., docs/notes.txt"
 )
 def read_text_file(input_path: str, workspace_root: Path) -> str:
     try:
@@ -114,9 +114,9 @@ def read_text_file(input_path: str, workspace_root: Path) -> str:
         return f"ERROR: {exc}"
 
     if not path.exists():
-        return f"ERROR: dosya bulunamadi: {input_path}"
+        return f"ERROR: file not found: {input_path}"
     if path.is_dir():
-        return f"ERROR: yol bir klasor: {input_path}"
+        return f"ERROR: path is a directory: {input_path}"
 
     content = path.read_text(encoding="utf-8", errors="replace")
     max_chars = 4000
@@ -127,8 +127,8 @@ def read_text_file(input_path: str, workspace_root: Path) -> str:
 
 @define_tool(
     name="list_workspace_files",
-    description="Calisma klasorunde dosyalari listeler.",
-    usage_hint="Girdi '<yol>|<glob>' (glob opsiyonel), ornek: '.' veya '.|*.py'"
+    description="Lists files in the workspace directory.",
+    usage_hint="Input is '<path>|<glob>' (glob is optional), e.g., '.' or '.|*.py'"
 )
 def list_workspace_files(input_path: str, workspace_root: Path) -> str:
     rel, pattern = _parse_list_input(input_path)
@@ -140,7 +140,7 @@ def list_workspace_files(input_path: str, workspace_root: Path) -> str:
     if not path.exists():
         return f"ERROR: path not found: {rel}"
     if not path.is_dir():
-        return f"ERROR: yol bir klasor degil: {rel}"
+        return f"ERROR: path is not a directory: {rel}"
 
     files: list[str] = []
     for candidate in path.rglob(pattern):
@@ -156,7 +156,7 @@ def list_workspace_files(input_path: str, workspace_root: Path) -> str:
         shown = files[:max_items] + [f"...[truncated {len(files)-max_items} files]..."]
     else:
         shown = files
-    return "\n".join(shown) if shown else "(bos)"
+    return "\n".join(shown) if shown else "(empty)"
 
 
 def _parse_list_input(raw_input: str) -> tuple[str, str]:
@@ -174,8 +174,8 @@ def _parse_list_input(raw_input: str) -> tuple[str, str]:
 
 @define_tool(
     name="now_utc",
-    description="Guncel UTC zamanini ISO formatinda dondurur.",
-    usage_hint="Girdi bos olabilir.",
+    description="Returns current UTC time in ISO format.",
+    usage_hint="Input can be empty.",
     requires_input=False
 )
 def now_utc(_: str, __: Path) -> str:
@@ -198,8 +198,8 @@ def _resolve_sqlite_db_path(workspace_root: Path) -> Path:
 
 @define_tool(
     name="sqlite_init_demo",
-    description="Ornek customers/orders tablolariyla demo SQLite DB olusturur.",
-    usage_hint="Girdi bos olabilir.",
+    description="Creates a demo SQLite DB with sample customers/orders tables.",
+    usage_hint="Input can be empty.",
     requires_input=False
 )
 def sqlite_init_demo(_: str, workspace_root: Path) -> str:
@@ -248,13 +248,13 @@ def sqlite_init_demo(_: str, workspace_root: Path) -> str:
     except sqlite3.Error as exc:
         return f"ERROR: sqlite_init_demo failed: {exc}"
 
-    return f"OK: demo sqlite veritabani olusturuldu: {db_path.as_posix()}"
+    return f"OK: demo sqlite database created: {db_path.as_posix()}"
 
 
 @define_tool(
     name="sqlite_list_tables",
-    description="Ayarlanan DB dosyasindaki SQLite tablolarini listeler.",
-    usage_hint="Girdi bos olabilir.",
+    description="Lists SQLite tables in the configured DB file.",
+    usage_hint="Input can be empty.",
     requires_input=False
 )
 def sqlite_list_tables(_: str, workspace_root: Path) -> str:
@@ -264,8 +264,8 @@ def sqlite_list_tables(_: str, workspace_root: Path) -> str:
         return f"ERROR: {exc}"
     if not db_path.exists():
         return (
-            f"ERROR: sqlite veritabani bulunamadi: {db_path.as_posix()}. "
-            "Once sqlite_init_demo calistirin."
+            f"ERROR: sqlite database not found: {db_path.as_posix()}. "
+            "Run sqlite_init_demo first."
         )
     try:
         with sqlite3.connect(db_path) as conn:
@@ -275,45 +275,45 @@ def sqlite_list_tables(_: str, workspace_root: Path) -> str:
             )
             rows = cursor.fetchall()
     except sqlite3.Error as exc:
-        return f"ERROR: sqlite_list_tables basarisiz: {exc}"
+        return f"ERROR: sqlite_list_tables failed: {exc}"
 
     names = [row[0] for row in rows if row and row[0] != "sqlite_sequence"]
     if not names:
-        return "TABLOLAR: (yok)"
-    return "TABLOLAR:\n" + "\n".join(names)
+        return "TABLES: (none)"
+    return "TABLES:\n" + "\n".join(names)
 
 
 @define_tool(
     name="sqlite_describe_table",
-    description="SQLite tablo semasini gosterir.",
-    usage_hint="Girdi tablo adidir, ornek: customers"
+    description="Shows the schema of an SQLite table.",
+    usage_hint="Input is the table name, e.g., customers"
 )
 def sqlite_describe_table(table_name: str, workspace_root: Path) -> str:
     name = table_name.strip()
     if not name:
-        return "ERROR: tablo adi bos."
+        return "ERROR: table name is empty."
     try:
         db_path = _resolve_sqlite_db_path(workspace_root)
     except ValueError as exc:
         return f"ERROR: {exc}"
     if not db_path.exists():
         return (
-            f"ERROR: sqlite veritabani bulunamadi: {db_path.as_posix()}. "
-            "Once sqlite_init_demo calistirin."
+            f"ERROR: sqlite database not found: {db_path.as_posix()}. "
+            "Run sqlite_init_demo first."
         )
     if not _is_safe_sql_identifier(name):
-        return "ERROR: gecersiz tablo adi."
+        return "ERROR: invalid table name."
     try:
         with sqlite3.connect(db_path) as conn:
             cursor = conn.cursor()
             cursor.execute(f"PRAGMA table_info({name})")
             rows = cursor.fetchall()
     except sqlite3.Error as exc:
-        return f"ERROR: sqlite_describe_table basarisiz: {exc}"
+        return f"ERROR: sqlite_describe_table failed: {exc}"
     if not rows:
-        return f"ERROR: tablo bulunamadi: {name}"
+        return f"ERROR: table not found: {name}"
 
-    lines = ["KOLONLAR: cid | name | type | notnull | default | pk"]
+    lines = ["COLUMNS: cid | name | type | notnull | default | pk"]
     for row in rows:
         lines.append(" | ".join(str(col) for col in row))
     return "\n".join(lines)
@@ -321,15 +321,15 @@ def sqlite_describe_table(table_name: str, workspace_root: Path) -> str:
 
 @define_tool(
     name="sqlite_query",
-    description="Salt-okuma SQLite sorgusu calistirir (SELECT/PRAGMA/WITH/EXPLAIN).",
-    usage_hint="Girdi SQL sorgu metnidir."
+    description="Executes a read-only SQLite query (SELECT/PRAGMA/WITH/EXPLAIN).",
+    usage_hint="Input is an SQL query string."
 )
 def sqlite_query(query: str, workspace_root: Path) -> str:
     sql = query.strip()
     if not sql:
-        return "ERROR: SQL sorgusu bos."
+        return "ERROR: SQL query is empty."
     if not _is_read_only_sql(sql):
-        return "ERROR: sqlite_query yalnizca salt-okuma sorgularini destekler (SELECT/PRAGMA/WITH/EXPLAIN)."
+        return "ERROR: sqlite_query only supports read-only queries (SELECT/PRAGMA/WITH/EXPLAIN)."
 
     try:
         db_path = _resolve_sqlite_db_path(workspace_root)
@@ -337,8 +337,8 @@ def sqlite_query(query: str, workspace_root: Path) -> str:
         return f"ERROR: {exc}"
     if not db_path.exists():
         return (
-            f"ERROR: sqlite veritabani bulunamadi: {db_path.as_posix()}. "
-            "Once sqlite_init_demo calistirin."
+            f"ERROR: sqlite database not found: {db_path.as_posix()}. "
+            "Run sqlite_init_demo first."
         )
 
     max_rows = 50
@@ -349,40 +349,40 @@ def sqlite_query(query: str, workspace_root: Path) -> str:
             rows = cursor.fetchmany(max_rows + 1)
             columns = [col[0] for col in (cursor.description or [])]
     except sqlite3.Error as exc:
-        return f"ERROR: sqlite_query basarisiz: {exc}"
+        return f"ERROR: sqlite_query failed: {exc}"
 
     truncated = len(rows) > max_rows
     if truncated:
         rows = rows[:max_rows]
 
     lines: list[str] = []
-    lines.append(f"KOLONLAR: {' | '.join(columns) if columns else '(yok)'}")
-    lines.append("SATIRLAR:")
+    lines.append(f"COLUMNS: {' | '.join(columns) if columns else '(none)'}")
+    lines.append("ROWS:")
     if not rows:
-        lines.append("(bos)")
+        lines.append("(empty)")
     else:
         for row in rows:
             lines.append(" | ".join(_format_sql_cell(cell) for cell in row))
-    lines.append(f"SATIR_SAYISI: {len(rows)}")
+    lines.append(f"ROW_COUNT: {len(rows)}")
     if truncated:
-        lines.append(f"NOT: ilk {max_rows} satir gosterildi.")
+        lines.append(f"NOTE: only the first {max_rows} rows are shown.")
     return "\n".join(lines)
 
 
 @define_tool(
     name="sqlite_execute",
-    description="SQLite yazma SQL'lerini calistirir (CREATE/INSERT/UPDATE/DELETE).",
-    usage_hint="Girdi SQL script metnidir."
+    description="Executes SQLite write statements (CREATE/INSERT/UPDATE/DELETE).",
+    usage_hint="Input is an SQL script string."
 )
 def sqlite_execute(sql_script: str, workspace_root: Path) -> str:
     sql = sql_script.strip()
     if not sql:
-        return "ERROR: SQL ifadesi bos."
+        return "ERROR: SQL statement is empty."
     if _is_read_only_sql(sql):
-        return "ERROR: Salt-okuma SQL icin sqlite_query kullanin."
+        return "ERROR: Use sqlite_query for read-only SQL."
     first_token = _first_sql_token(sql)
     if first_token in {"attach", "detach"}:
-        return "ERROR: ATTACH/DETACH desteklenmiyor."
+        return "ERROR: ATTACH/DETACH are not supported."
 
     try:
         db_path = _resolve_sqlite_db_path(workspace_root)
@@ -396,8 +396,8 @@ def sqlite_execute(sql_script: str, workspace_root: Path) -> str:
             cursor.executescript(sql)
             conn.commit()
     except sqlite3.Error as exc:
-        return f"ERROR: sqlite_execute basarisiz: {exc}"
-    return f"OK: sqlite_execute uygulandi: {db_path.as_posix()}"
+        return f"ERROR: sqlite_execute failed: {exc}"
+    return f"OK: sqlite_execute applied: {db_path.as_posix()}"
 
 
 def _first_sql_token(sql: str) -> str:
@@ -420,33 +420,33 @@ def _format_sql_cell(cell: object) -> str:
 
 @define_tool(
     name="duckduckgo_search",
-    description="DuckDuckGo uzerinden internette gercek zamanli arama yapar.",
-    usage_hint="Girdi aranacak anahtar kelimedir, ornek: Python 3.12 ozellikleri"
+    description="Performs real-time web search via DuckDuckGo.",
+    usage_hint="Input is the search query, e.g., Python 3.12 features"
 )
 def duckduckgo_search(query: str, _: Path) -> str:
     query = query.strip()
     if not query:
-        return "ERROR: Arama sorgusu bos."
+        return "ERROR: Search query is empty."
     try:
         from duckduckgo_search import DDGS
         ddgs = DDGS()
         results = list(ddgs.text(query, max_results=5))
     except ImportError:
-        return "ERROR: duckduckgo-search paketi yuklu degil."
+        return "ERROR: duckduckgo-search package is not installed."
     except Exception as exc:
-        return f"ERROR: Arama basarisiz: {exc}"
+        return f"ERROR: Search failed: {exc}"
 
     if not results:
-        return "Bulunamadi."
+        return "Not found."
     
-    lines = [f"Arama Sonuclari ('{query}'):", ""]
+    lines = [f"Search Results ('{query}'):", ""]
     for i, res in enumerate(results, 1):
-        lines.append(f"{i}. {res.get('title', 'Baslik Yok')}")
-        lines.append(f"   URL: {res.get('href', 'URL Yok')}")
+        lines.append(f"{i}. {res.get('title', 'No Title')}")
+        lines.append(f"   URL: {res.get('href', 'No URL')}")
         snippet = res.get('body', '')
         if len(snippet) > 200:
             snippet = snippet[:197] + "..."
-        lines.append(f"   Ozet: {snippet}")
+        lines.append(f"   Summary: {snippet}")
         lines.append("")
     
     return "\n".join(lines)
@@ -489,5 +489,5 @@ def tools_without_input() -> set[str]:
 def run_tool(tool_name: str, tool_input: str, workspace_root: Path) -> str:
     spec = AVAILABLE_TOOLS.get(tool_name)
     if not spec:
-        return f"ERROR: bilinmeyen arac '{tool_name}'."
+        return f"ERROR: unknown tool '{tool_name}'."
     return spec.fn(tool_input or "", workspace_root)

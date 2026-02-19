@@ -103,91 +103,91 @@ if BaseModel is not None and ConfigDict is not None and Field is not None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Hugging Face tool-calling mini benchmark degerlendirmesi"
+        description="Hugging Face tool-calling mini benchmark evaluation"
     )
     parser.add_argument(
         "--dataset",
         type=str,
         default=str(DEFAULT_DATASET),
-        help="Degerlendirilecek jsonl dosya yolu.",
+        help="Path to the jsonl file to evaluate.",
     )
     parser.add_argument(
         "--dataset-format",
         type=str,
         choices=["auto", "jsonl", "bfcl_sql"],
         default="auto",
-        help="Veri formati. auto secenegi BFCL SQL dosyasini otomatik algilar.",
+        help="Data format. 'auto' automatically detects BFCL SQL files.",
     )
     parser.add_argument(
         "--answers",
         type=str,
         default=None,
-        help="BFCL SQL answer dosyasi (possible_answer/BFCL_v3_sql.json).",
+        help="BFCL SQL answer file (possible_answer/BFCL_v3_sql.json).",
     )
     parser.add_argument(
         "--model",
         type=str,
         default=None,
-        help="Model adi (varsayilan: AGENT_MODEL veya gpt-oss-20b).",
+        help="Model name (default: AGENT_MODEL or gpt-oss-20b).",
     )
     parser.add_argument(
         "--reasoning-effort",
         type=str,
         choices=["low", "medium", "high"],
         default=None,
-        help="Reasoning effort seviyesi.",
+        help="Reasoning effort level.",
     )
     parser.add_argument(
         "--language",
         type=str,
-        choices=["tr", "en"],
-        default="tr",
-        help="Cikti dili (tr veya en)."
+        choices=["en"],
+        default="en",
+        help="Output language (en)."
     )
     parser.add_argument(
         "--limit",
         type=int,
         default=None,
-        help="Ilk N ornegi calistir.",
+        help="Run the first N samples.",
     )
     parser.add_argument(
         "--sampling",
         type=str,
         choices=["random", "head"],
         default="random",
-        help="Limit uygulanirken ornek secim stratejisi.",
+        help="Sample selection strategy when limit is applied.",
     )
     parser.add_argument(
         "--seed",
         type=int,
         default=None,
-        help="Random sampling icin seed (opsiyonel).",
+        help="Seed for random sampling (optional).",
     )
     parser.add_argument(
         "--runs-dir",
         type=str,
         default="runs/evals",
-        help="Rapor cikti klasoru.",
+        help="Report output directory.",
     )
     parser.add_argument(
         "--repair-attempts",
         type=int,
         default=1,
-        help="Parse/guard hatasinda uygulanacak otomatik duzeltme deneme sayisi.",
+        help="Number of auto-repair attempts on parse/guard error.",
     )
     parser.add_argument(
         "--max-tool-calls",
         type=int,
         default=None,
-        help="Tahmin edilen tool_call sayisini en fazla bu degerle sinirla (opsiyonel).",
+        help="Maximum limit for predicted tool_call count (optional).",
     )
     parser.add_argument(
         "--max-completion-tokens",
         type=int,
         default=None,
         help=(
-            "Model cikti token ust limiti. Verilmezse/0 ise max_tokens gonderilmez; "
-            "model cevap tamamlandiginda durur."
+            "Model output token limit. If not provided/0, max_tokens is not sent; "
+            "model stops when response is complete."
         ),
     )
     return parser.parse_args()
@@ -490,22 +490,22 @@ def _build_repair_messages(
         {
             "role": "system",
             "content": (
-                "Gecersiz tool-calling ciktilarini duzeltirsin.\n"
+                "You fix invalid tool-calling outputs.\n"
                 f"Reasoning effort: {reasoning_effort}.\n"
-                "Sadece gecerli JSON dondur, ek metin yazma."
+                "Return only valid JSON, do not write additional text."
             ),
         },
         {
             "role": "user",
             "content": (
-                "Asagidaki onceki cikti parse edilemedi veya arac kurallarina uymadi.\n"
-                "Verilen tool listesinin disina cikma.\n\n"
-                f"Sorgu:\n{query}\n\n"
-                f"Toollar:\n{json.dumps(tools, ensure_ascii=False)}\n\n"
-                f"Onceki cikti:\n{previous_output}\n\n"
-                "Duzeltilmis cikti formati:\n"
+                "The following previous output could not be parsed or did not comply with tool rules.\n"
+                "Do not use tools outside the given tool list.\n\n"
+                f"Query:\n{query}\n\n"
+                f"Tools:\n{json.dumps(tools, ensure_ascii=False)}\n\n"
+                f"Previous output:\n{previous_output}\n\n"
+                "Corrected output format:\n"
                 '{"tool_calls":[{"name":"...","arguments":{...}}]}\n'
-                "JSON bittigi anda ciktiyi durdur."
+                "Stop output as soon as the JSON ends."
             ),
         },
     ]
@@ -941,46 +941,27 @@ def _extract_second_date(text: str) -> datetime | None:
         return None
 
 
-def _build_messages(sample: dict[str, Any], reasoning_effort: str, language: str = "tr") -> list[dict[str, str]]:
+def _build_messages(sample: dict[str, Any], reasoning_effort: str, language: str = "en") -> list[dict[str, str]]:
     query = sample["query"]
     tools = sample["tools"]
     
-    if language == "en":
-        sys_prompt = (
-            "You are a tool-calling evaluator.\n"
-            f"Reasoning effort: {reasoning_effort}.\n"
-            "Extract the required list of tool calls based on the user's request.\n"
-            "Rules:\n"
-            "- Use only the provided tool names.\n"
-            "- Return only valid JSON.\n"
-            "- Do not write plain text, markdown, or explanations.\n"
-            "- If there are comparisons or multiple choices, return multiple tool_calls.\n"
-            "- Stop output as soon as the JSON ends."
-        )
-        user_prompt = (
-            f"Query:\n{query}\n\n"
-            f"Tools:\n{json.dumps(tools, ensure_ascii=False)}\n\n"
-            "Output format:\n"
-            '{"tool_calls":[{"name":"...","arguments":{...}}]}'
-        )
-    else:
-        sys_prompt = (
-            "Tool-calling degerlendiricisisin.\n"
-            f"Reasoning effort: {reasoning_effort}.\n"
-            "Kullanicinin istegine gore gerekli tool cagri listesini cikart.\n"
-            "Kurallar:\n"
-            "- Sadece verilen tool adlarini kullan.\n"
-            "- Cevap sadece JSON olsun.\n"
-            "- Duz metin, markdown, aciklama yazma.\n"
-            "- Karsilastirma/iki farkli secenek varsa birden fazla tool_call dondur.\n"
-            "- JSON bittigi anda ciktiyi durdur."
-        )
-        user_prompt = (
-            f"Sorgu:\n{query}\n\n"
-            f"Toollar:\n{json.dumps(tools, ensure_ascii=False)}\n\n"
-            "Cikti formati:\n"
-            '{"tool_calls":[{"name":"...","arguments":{...}}]}'
-        )
+    sys_prompt = (
+        "You are a tool-calling evaluator.\n"
+        f"Reasoning effort: {reasoning_effort}.\n"
+        "Extract the required list of tool calls based on the user's request.\n"
+        "Rules:\n"
+        "- Use only the provided tool names.\n"
+        "- Return only valid JSON.\n"
+        "- Do not write plain text, markdown, or explanations.\n"
+        "- If there are comparisons or multiple choices, return multiple tool_calls.\n"
+        "- Stop output as soon as the JSON ends."
+    )
+    user_prompt = (
+        f"Query:\n{query}\n\n"
+        f"Tools:\n{json.dumps(tools, ensure_ascii=False)}\n\n"
+        "Output format:\n"
+        '{"tool_calls":[{"name":"...","arguments":{...}}]}'
+    )
 
     return [
         {"role": "system", "content": sys_prompt},
@@ -1025,15 +1006,15 @@ def main() -> int:
         else:
             samples = samples[: args.limit]
     if not samples:
-        print(f"Degerlendirme dataseti bos: {dataset_path}")
+        print(f"Evaluation dataset is empty: {dataset_path}")
         return 1
 
     client: Any = OpenAI(base_url=settings.base_url, api_key=settings.api_key)
     available = [m.id for m in client.models.list().data]
     if requested_model not in available:
         print(
-            f"Istenen model yok: {requested_model}. "
-            f"Yuklu modeller: {', '.join(available)}"
+            f"Requested model not found: {requested_model}. "
+            f"Installed models: {', '.join(available)}"
         )
         return 1
 
@@ -1332,13 +1313,13 @@ def main() -> int:
     )
     report_path.write_text(_build_report(summary, results), encoding="utf-8")
 
-    print("Degerlendirme tamamlandi.")
-    print(f"Ozet: {summary_path}")
-    print(f"Detay: {details_path}")
-    print(f"Rapor: {report_path}")
+    print("Evaluation completed.")
+    print(f"Summary: {summary_path}")
+    print(f"Details: {details_path}")
+    print(f"Report: {report_path}")
     print("")
     print(
-        "Skorlar -> "
+        "Scores -> "
         f"exact: {summary['exact_match_accuracy']}, "
         f"name: {summary['name_match_accuracy']}, "
         f"count: {summary['call_count_accuracy']}, "
@@ -1349,13 +1330,13 @@ def main() -> int:
 
 def _build_report(summary: dict[str, Any], results: list[dict[str, Any]]) -> str:
     lines: list[str] = []
-    lines.append("# HF Tool-Calling Degerlendirme Raporu")
+    lines.append("# HF Tool-Calling Evaluation Report")
     lines.append("")
     lines.append(f"- Model: `{summary['model']}`")
     lines.append(f"- Backend: `{summary.get('backend')}`")
     lines.append(f"- Reasoning effort: `{summary['reasoning_effort']}`")
-    lines.append(f"- Veri: `{summary['dataset_path']}`")
-    lines.append(f"- Veri formati: `{summary['dataset_format']}`")
+    lines.append(f"- Dataset: `{summary['dataset_path']}`")
+    lines.append(f"- Dataset format: `{summary['dataset_format']}`")
     lines.append(f"- Sampling: `{summary.get('sampling')}`")
     lines.append(f"- Seed: `{summary.get('seed')}`")
     lines.append(f"- Max tool calls: `{summary.get('max_tool_calls')}`")
@@ -1364,9 +1345,9 @@ def _build_report(summary: dict[str, Any], results: list[dict[str, Any]]) -> str
     )
     if summary.get("answer_path"):
         lines.append(f"- Ground truth: `{summary['answer_path']}`")
-    lines.append(f"- Ornek sayisi: `{summary['sample_count']}`")
+    lines.append(f"- Sample count: `{summary['sample_count']}`")
     lines.append("")
-    lines.append("## Skorlar")
+    lines.append("## Scores")
     lines.append("")
     lines.append(f"- Exact match accuracy: `{summary['exact_match_accuracy']}`")
     lines.append(f"- Tool name accuracy: `{summary['name_match_accuracy']}`")
@@ -1377,7 +1358,7 @@ def _build_report(summary: dict[str, Any], results: list[dict[str, Any]]) -> str
     lines.append("")
     plan = summary.get("actionable_plan", [])
     if not plan:
-        lines.append("- Ek aksiyon onerisi yok.")
+        lines.append("- No additional action suggestion.")
     else:
         for item in plan:
             lines.append(f"- {item}")
@@ -1386,7 +1367,7 @@ def _build_report(summary: dict[str, Any], results: list[dict[str, Any]]) -> str
     lines.append("")
     patterns = summary.get("top_failure_patterns", [])
     if not patterns:
-        lines.append("- Pattern bulunamadi.")
+        lines.append("- No pattern found.")
     else:
         for pattern in patterns:
             lines.append(
@@ -1394,23 +1375,23 @@ def _build_report(summary: dict[str, Any], results: list[dict[str, Any]]) -> str
                 f"{pattern.get('error_type')} | "
                 f"name={pattern.get('name_match')} count={pattern.get('call_count_match')} "
                 f"parse={pattern.get('parse_error')} | "
-                f"adet={pattern.get('count')}"
+                f"count={pattern.get('count')}"
             )
     lines.append("")
-    lines.append("## Hata Dagilimi")
+    lines.append("## Error Breakdown")
     lines.append("")
     breakdown = summary.get("error_breakdown", {})
     if not breakdown:
-        lines.append("- Hata yok.")
+        lines.append("- No errors.")
     else:
         for key, value in breakdown.items():
             lines.append(f"- {key}: {value}")
     lines.append("")
-    lines.append("## Arguman Hata Dagilimi")
+    lines.append("## Argument Error Breakdown")
     lines.append("")
     argument_breakdown = summary.get("argument_error_breakdown", {})
     if not argument_breakdown:
-        lines.append("- Arguman bazli hata yok.")
+        lines.append("- No argument errors.")
     else:
         for key, value in argument_breakdown.items():
             lines.append(f"- {key}: {value}")
@@ -1420,61 +1401,61 @@ def _build_report(summary: dict[str, Any], results: list[dict[str, Any]]) -> str
     repair = summary.get("repair", {})
     guard = summary.get("guard", {})
     if repair:
-        lines.append(f"- Repair denenen ornek: `{repair.get('attempted_samples', 0)}`")
-        lines.append(f"- Basarili repair: `{repair.get('successful_repairs', 0)}`")
+        lines.append(f"- Attempted repair samples: `{repair.get('attempted_samples', 0)}`")
+        lines.append(f"- Successful repairs: `{repair.get('successful_repairs', 0)}`")
         lines.append(
-            f"- Ornek basi max deneme: `{repair.get('max_attempts_per_sample', 0)}`"
+            f"- Max attempts per sample: `{repair.get('max_attempts_per_sample', 0)}`"
         )
         lines.append(
-            f"- Local deterministic repair uygulanan: `{repair.get('local_repair_applied', 0)}`"
+            f"- Local deterministic repair applied: `{repair.get('local_repair_applied', 0)}`"
         )
         lines.append(
-            f"- Local deterministic recover edilen call: `{repair.get('local_repair_recovered_calls', 0)}`"
+            f"- Local deterministic recovered calls: `{repair.get('local_repair_recovered_calls', 0)}`"
         )
         lines.append(
-            f"- json_repair kullanilan local repair: `{repair.get('json_repair_used', 0)}`"
+            f"- Local repair using json_repair: `{repair.get('json_repair_used', 0)}`"
         )
     if guard:
         lines.append(
-            f"- Guard dusen bilinmeyen tool call: `{guard.get('dropped_unknown_tool_calls', 0)}`"
+            f"- Unknown tool calls dropped by guard: `{guard.get('dropped_unknown_tool_calls', 0)}`"
         )
         lines.append(
-            f"- Guard temizlenen arguman anahtari: `{guard.get('pruned_argument_keys', 0)}`"
+            f"- Argument keys pruned by guard: `{guard.get('pruned_argument_keys', 0)}`"
         )
         lines.append(
-            f"- Guard eksik zorunlu anahtar sayisi: `{guard.get('missing_required_keys', 0)}`"
+            f"- Missing required keys by guard: `{guard.get('missing_required_keys', 0)}`"
         )
         lines.append(
-            f"- Max tool call limitiyle dusen call: `{guard.get('dropped_by_max_tool_calls', 0)}`"
+            f"- Calls dropped by max tool call limit: `{guard.get('dropped_by_max_tool_calls', 0)}`"
         )
         lines.append(
-            f"- JSON schema validation hata sayisi: `{guard.get('schema_validation_errors', 0)}`"
+            f"- JSON schema validation errors: `{guard.get('schema_validation_errors', 0)}`"
         )
         lines.append(
-            f"- Fallback ile enjekte edilen call: `{guard.get('fallback_injected_calls', 0)}`"
+            f"- Fallback injected calls: `{guard.get('fallback_injected_calls', 0)}`"
         )
     lines.append("")
-    lines.append("## Basarisiz Ornekler")
+    lines.append("## Failed Samples")
     lines.append("")
 
     failed = [row for row in results if not row["exact_match"]]
     if not failed:
-        lines.append("- Tum ornekler exact match.")
+        lines.append("- All samples are exact matches.")
         return "\n".join(lines)
 
     for row in failed[:10]:
-        lines.append(f"### Ornek {row['index']} (row_id={row.get('source_row_id')})")
-        lines.append(f"- Sorgu: {row['query']}")
-        lines.append(f"- Hata tipi: `{row.get('error_type')}`")
+        lines.append(f"### Sample {row['index']} (row_id={row.get('source_row_id')})")
+        lines.append(f"- Query: {row['query']}")
+        lines.append(f"- Error type: `{row.get('error_type')}`")
         if row.get("expected_variant_count", 1) > 1:
             lines.append(
-                f"- Eslesen varyant index: `{row.get('matched_variant_index')}`"
+                f"- Matched variant index: `{row.get('matched_variant_index')}`"
             )
         lines.append(
-            f"- Beklenen: `{json.dumps(row['expected_tool_calls'], ensure_ascii=False)}`"
+            f"- Expected: `{json.dumps(row['expected_tool_calls'], ensure_ascii=False)}`"
         )
         lines.append(
-            f"- Tahmin: `{json.dumps(row['predicted_tool_calls'], ensure_ascii=False)}`"
+            f"- Predicted: `{json.dumps(row['predicted_tool_calls'], ensure_ascii=False)}`"
         )
         lines.append("")
 

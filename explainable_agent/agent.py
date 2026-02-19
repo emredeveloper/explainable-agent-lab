@@ -245,23 +245,23 @@ def _fallback_answer_from_tool_outputs(steps: list[StepTrace]) -> str | None:
     lines = [line.strip() for line in raw_output.splitlines() if line.strip()]
 
     if tool_name == "calculate_math":
-        return lines[0] if lines else "Hesaplama sonucu bos."
+        return lines[0] if lines else "Calculation result empty."
 
     if tool_name == "list_workspace_files":
-        top = [ln for ln in lines if ln != "(bos)"][:5]
+        top = [ln for ln in lines if ln != "(empty)"][:5]
         if not top:
-            return "Listeleme sonucu bos."
-        return "Bulunan dosyalar:\n" + "\n".join(f"- {item}" for item in top)
+            return "Listing result empty."
+        return "Found files:\n" + "\n".join(f"- {item}" for item in top)
 
     if tool_name == "read_text_file":
-        preview = "\n".join(lines[:12]) if lines else "(bos icerik)"
-        return "Dosya onizlemesi:\n" + preview
+        preview = "\n".join(lines[:12]) if lines else "(empty content)"
+        return "File preview:\n" + preview
 
     if tool_name.startswith("sqlite_"):
         top = lines[:12]
         if not top:
-            return "SQLite sonucu bos."
-        return "SQLite sonucu:\n" + "\n".join(top)
+            return "SQLite result empty."
+        return "SQLite result:\n" + "\n".join(top)
 
     return raw_output[:400] if raw_output else None
 
@@ -275,16 +275,16 @@ def _build_step_audit(
 ) -> dict[str, Any]:
     warnings: list[str] = []
     if decision.confidence < 0.4:
-        warnings.append("Dusuk confidence tespit edildi.")
+        warnings.append("Low confidence detected.")
     if decision.action == "tool_call" and not decision.tool_name:
-        warnings.append("tool_call aksiyonu icin tool_name eksik.")
+        warnings.append("tool_name is missing for tool_call action.")
     if decision.action == "final_answer":
         if _looks_generic_completion(decision.answer or ""):
-            warnings.append("Nihai cevap genel gorunuyor.")
+            warnings.append("Final answer looks generic.")
         if _is_low_quality_answer(decision.answer or ""):
-            warnings.append("Nihai cevap dusuk kaliteli olabilir.")
+            warnings.append("Final answer might be low quality.")
     if tool_output and tool_output.startswith("ERROR:"):
-        warnings.append("Arac calismasi hata dondu.")
+        warnings.append("Tool execution returned error.")
     return {
         "source": source,
         "why_tool": why_tool or "",
@@ -308,36 +308,36 @@ class ExplainableAgent:
         action_color = "bold blue" if decision.action == "tool_call" else "bold green"
         
         content = Text()
-        content.append(f"Gerekce: ", style="bold")
+        content.append(f"Rationale: ", style="bold")
         content.append(f"{decision.rationale}\n")
         
         conf_color = "red" if decision.confidence < 0.5 else "yellow" if decision.confidence < 0.8 else "green"
-        content.append(f"Guven: ", style="bold")
+        content.append(f"Confidence: ", style="bold")
         content.append(f"{decision.confidence:.2f}\n", style=conf_color)
         
         if decision.action == "tool_call":
-            content.append(f"Arac: ", style="bold")
+            content.append(f"Tool: ", style="bold")
             content.append(f"{decision.tool_name}\n", style="magenta")
-            content.append(f"Girdi: ", style="bold")
+            content.append(f"Input: ", style="bold")
             content.append(f"{decision.tool_input}\n")
             if tool_output:
                 out_preview = tool_output[:300] + "..." if len(tool_output) > 300 else tool_output
-                content.append(f"Cikti: ", style="bold")
+                content.append(f"Output: ", style="bold")
                 content.append(f"{out_preview}\n", style="dim")
         else:
-            content.append(f"Nihai Cevap: ", style="bold")
+            content.append(f"Final Answer: ", style="bold")
             content.append(f"{decision.answer}\n", style="bold white")
             
         if decision.error_analysis:
-            content.append(f"\nHata Analizi: ", style="bold red")
+            content.append(f"\nError Analysis: ", style="bold red")
             content.append(f"{decision.error_analysis}\n")
         if decision.proposed_fix:
-            content.append(f"Onerilen Cozum: ", style="bold yellow")
+            content.append(f"Proposed Fix: ", style="bold yellow")
             content.append(f"{decision.proposed_fix}\n")
 
         panel = Panel(
             content,
-            title=f"Adim {step_num} | Aksiyon: {decision.action}",
+            title=f"Step {step_num} | Action: {decision.action}",
             border_style=action_color,
             expand=False
         )
@@ -354,10 +354,10 @@ class ExplainableAgent:
             {
                 "role": "user",
                 "content": (
-                    f"Kullanici gorevi:\n{task}\n\n"
-                    f"Kullanilabilir araclar:\n{tool_catalog_text()}\n\n"
-                    f"Arac katalog JSON'u:\n{tool_catalog_payload()}\n\n"
-                    "Gerekirse her adimda yalnizca bir arac sec."
+                    f"User task:\n{task}\n\n"
+                    f"Available tools:\n{tool_catalog_text()}\n\n"
+                    f"Tool catalog JSON:\n{tool_catalog_payload()}\n\n"
+                    "Select only one tool per step if necessary."
                 ),
             }
         ]
@@ -381,11 +381,11 @@ class ExplainableAgent:
                     model_output="[deterministic_tool_call]",
                     decision=Decision(
                         action="tool_call",
-                        rationale="Acik arac istegi dogrudan uygulandi.",
+                        rationale="Explicit tool request applied directly.",
                         confidence=1.0,
                         evidence=[
-                            "Gorev metninde arac adi acikca verildi.",
-                            "Ilk adim deterministik araca yonlendirildi.",
+                            "Tool name explicitly provided in task text.",
+                            "First step routed to deterministic tool.",
                         ],
                         tool_name=tool_name,
                         tool_input=tool_input,
@@ -394,9 +394,9 @@ class ExplainableAgent:
                     latency_ms=0,
                     audit={
                         "source": "explicit_request",
-                        "why_tool": "Kullanicinin metninde arac adi acikca gecti.",
+                        "why_tool": "Tool name explicitly mentioned in user text.",
                         "notes": [
-                            "Gorevde acik arac adi bulundugu icin LLM adimi atlandi."
+                            "LLM step skipped because explicit tool name found in task."
                         ],
                         "warnings": [],
                     },
@@ -406,15 +406,15 @@ class ExplainableAgent:
                 {
                     "role": "assistant",
                     "content": (
-                        f"Deterministik arac cagrisi yapildi: {tool_name}\n"
-                        f"Girdi: {tool_input}\nCikti:\n{tool_output}"
+                        f"Deterministic tool call executed: {tool_name}\n"
+                        f"Input: {tool_input}\nOutput:\n{tool_output}"
                     ),
                 }
             )
 
-            explicit_next_prompt = "Arac sonucuna gore Turkce ve kisa bir nihai cevap ver. JSON formatina uygun karar dondur."
+            explicit_next_prompt = "Provide a short final answer based on the tool result. Return decision in valid JSON format."
             if tool_output and tool_output.startswith("ERROR:"):
-                explicit_next_prompt = "Onceki aractan HATA alindi. Lutfen JSON icindeki 'error_analysis' ve 'proposed_fix' alanlarini kullanarak hatanin nedenini ve nasil cozulecegini belirt. DIKKAT: Hatayi cozmek icin MUTLAKA action='tool_call' yaparak yeni bir arac cagir. Ayrica JSON icinde 'tool_name' ve 'tool_input' alanlarini doldurmayi KESINLIKLE UNUTMA!"
+                explicit_next_prompt = "ERROR received from previous tool. Please state the cause of the error and how to fix it using the 'error_analysis' and 'proposed_fix' fields in the JSON. WARNING: You MUST call a new tool by setting action='tool_call' to fix the error. Also, DO NOT FORGET to fill in the 'tool_name' and 'tool_input' fields in the JSON!"
 
             messages.append(
                 {
@@ -442,31 +442,31 @@ class ExplainableAgent:
                     decision = Decision(
                         action="tool_call",
                         rationale=(
-                            "Heuristik duzeltme: ilk adimda gorev sinyaline uygun arac secildi."
+                            "Heuristic correction: tool selected according to task signal in first step."
                         ),
                         confidence=max(decision.confidence, 0.7),
                         evidence=[
-                            "Ilk adimda belirgin yapisal sinyal algilandi.",
-                            "Daha stabil calisma icin deterministik arac secimi uygulandi.",
+                            "Distinct structural signal detected in first step.",
+                            "Deterministic tool selection applied for more stable execution.",
                         ],
                         tool_name=tool_name,
                         tool_input=tool_input,
                     )
                     raw_output = raw_output + "\n[heuristic_override_tool_correction]"
                     decision_source = "heuristic_override"
-                    decision_notes.append("Ilk adimda araca yonelik heuristik duzeltme uygulandi.")
+                    decision_notes.append("Heuristic correction for tool applied in first step.")
 
             if suggestion and decision.action == "final_answer":
                 tool_name, tool_input = suggestion
                 decision = Decision(
                     action="tool_call",
                     rationale=(
-                        "Heuristik duzeltme: gorevde dogrudan hesap/SQL/dosya sinyali var."
+                        "Heuristic correction: task has direct math/SQL/file signal."
                     ),
                     confidence=max(decision.confidence, 0.7),
                     evidence=[
-                        "Yapisal gorev sinyali arac kullanimini gerektiriyor.",
-                        "Ilk adimda erken final yaniti engellendi.",
+                        "Structural task signal requires tool usage.",
+                        "Early final answer prevented in first step.",
                     ],
                     tool_name=tool_name,
                     tool_input=tool_input,
@@ -474,7 +474,7 @@ class ExplainableAgent:
                 raw_output = raw_output + "\n[heuristic_override_tool_call]"
                 decision_source = "heuristic_override"
                 decision_notes.append(
-                    "Ilk adimda erken final engellendi, arac cagrisi zorlandi."
+                    "Early final prevented in first step, forced tool call."
                 )
 
             if decision.action == "tool_call":
@@ -496,7 +496,7 @@ class ExplainableAgent:
                             notes=decision_notes,
                             tool_output=tool_output,
                             why_tool=(
-                                f"{decision.tool_name} secildi; gerekce: {decision.rationale}"
+                                f"{decision.tool_name} selected; rationale: {decision.rationale}"
                                 if decision.tool_name
                                 else ""
                             ),
@@ -505,11 +505,11 @@ class ExplainableAgent:
                 )
                 self._print_step(step, decision, tool_output)
                 messages.append({"role": "assistant", "content": raw_output})
-                content_text = f"Arac sonucu ('{decision.tool_name}'):\n{tool_output}\n\n"
+                content_text = f"Tool result ('{decision.tool_name}'):\n{tool_output}\n\n"
                 if tool_output and tool_output.startswith("ERROR:"):
-                    content_text += "Onceki aractan HATA alindi. Lutfen JSON icindeki 'error_analysis' ve 'proposed_fix' alanlarini kullanarak hatanin nedenini ve nasil cozulecegini belirt. DIKKAT: Hatayi cozmek icin MUTLAKA action='tool_call' yaparak yeni bir arac cagir. Sadece cozum bulamiyorsan final_answer kullan. Ayrica JSON icinde 'tool_name' ve 'tool_input' alanlarini doldurmayi KESINLIKLE UNUTMA!"
+                    content_text += "ERROR received from previous tool. Please use the 'error_analysis' and 'proposed_fix' fields in the JSON to state the cause of the error and how to fix it. WARNING: You MUST call a new tool by setting action='tool_call' to fix the error. Only use final_answer if you absolutely cannot find a solution. Also, DO NOT FORGET to fill in the 'tool_name' and 'tool_input' fields in the JSON!"
                 else:
-                    content_text += "Siradaki adimi sec."
+                    content_text += "Select the next step."
 
                 messages.append(
                     {
@@ -532,7 +532,7 @@ class ExplainableAgent:
                         source=decision_source,
                         notes=decision_notes,
                         tool_output=None,
-                        why_tool="Final answer secildi, yeni tool cagrisi gerekli degil.",
+                        why_tool="Final answer selected, new tool call not required.",
                     ),
                 )
             )
@@ -544,11 +544,11 @@ class ExplainableAgent:
             if fallback:
                 final_answer = fallback
                 errors.append(
-                    "Maksimum adimda model nihai cevap vermedi; arac sonucundan cevap uretildi."
+                    "Model did not provide a final answer within max steps; generated from tool result."
                 )
             else:
                 errors.append(
-                    "Maksimum adim sayisina ulasildi; nihai cevap modelden yeniden alindi."
+                    "Maximum steps reached; final answer regenerated from model."
                 )
                 final_answer = self.client.get_alternative_answer(
                     model=resolved_model,
@@ -564,14 +564,14 @@ class ExplainableAgent:
             if fallback:
                 final_answer = fallback
                 errors.append(
-                    "Genel/gecersiz nihai cevap, arac sonucundan otomatik duzeltildi."
+                    "Generic/invalid final answer automatically corrected from tool result."
                 )
         if _is_low_quality_answer(final_answer):
             if tool_used:
                 fallback = _fallback_answer_from_tool_outputs(steps)
                 if fallback:
                     final_answer = fallback
-                    errors.append("Dusuk kaliteli nihai cevap, arac sonucundan otomatik duzeltildi.")
+                    errors.append("Low quality final answer automatically corrected from tool result.")
             else:
                 final_answer = self.client.get_alternative_answer(
                     model=resolved_model,
@@ -579,7 +579,7 @@ class ExplainableAgent:
                     temperature=self.settings.temperature,
                     reasoning_effort=self.settings.reasoning_effort,
                 )
-                errors.append("Dusuk kaliteli nihai cevap, dogrudan yanit ile yenilendi.")
+                errors.append("Low quality final answer refreshed with direct answer.")
 
         if tool_used:
             alternative_answer = self.client.get_alternative_answer(
@@ -594,18 +594,18 @@ class ExplainableAgent:
             support_score = tool_support_score(final_answer, steps)
             likely_faithful = similarity < threshold or support_score >= support_threshold
             note = (
-                "Arac izi guclu (alternatif benzerlik dusuk veya arac-overlap yuksek)."
+                "Strong tool trace (low alternative similarity or high tool overlap)."
                 if likely_faithful
-                else "Arac izi zayif: alternatif benzerlik yuksek ve arac-overlap dusuk."
+                else "Weak tool trace: high alternative similarity and low tool overlap."
             )
         else:
-            alternative_answer = "(atlanan kontrol: arac kullanilmadi)"
+            alternative_answer = "(skipped check: tool not used)"
             similarity = 1.0
             threshold = 0.75
             support_threshold = 0.25
             support_score = 0.0
             likely_faithful = False
-            note = "Faithfulness kontrolu atlandi cunku arac cagrisi yok."
+            note = "Faithfulness check skipped because there is no tool call."
 
         finished_at = _utc_now()
         faithfulness = FaithfulnessCheck(

@@ -72,36 +72,29 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--language", 
         type=str, 
-        default="tr", 
-        choices=["tr", "en"], 
-        help="Cikti ve rapor dili (tr veya en)."
+        default="en", 
+        choices=["en"], 
+        help="Output language (en)."
     )
     parser.add_argument(
         "--max-completion-tokens",
         type=int,
         default=None,
         help=(
-            "Ust token limiti. Verilmezse/0 ise max_tokens gonderilmez; "
-            "model cevap tamamlandiginda durur."
+            "Maximum token limit. If not provided/0, max_tokens is not sent; "
+            "model stops when response is complete."
         ),
     )
     parser.add_argument("--seed", type=int, default=None)
     return parser.parse_args()
 
 
-def _build_messages(problem_statement: str, language: str = "tr") -> list[dict[str, str]]:
-    if language == "en":
-        sys_prompt = (
-            "You are a software issue triage assistant. Return only valid JSON.\n"
-            'Format: {"analysis":{"root_cause_hypothesis":"...","risk":"low|medium|high"},'
-            '"files_to_inspect":["..."],"first_actions":["..."]}'
-        )
-    else:
-        sys_prompt = (
-            "Sen bir yazilim sorunu inceleme asistanisin. Sadece gecerli JSON dondur.\n"
-            'Format: {"analysis":{"root_cause_hypothesis":"...","risk":"low|medium|high"},'
-            '"files_to_inspect":["..."],"first_actions":["..."]}'
-        )
+def _build_messages(problem_statement: str, language: str = "en") -> list[dict[str, str]]:
+    sys_prompt = (
+        "You are a software issue triage assistant. Return only valid JSON.\n"
+        'Format: {"analysis":{"root_cause_hypothesis":"...","risk":"low|medium|high"},'
+        '"files_to_inspect":["..."],"first_actions":["..."]}'
+    )
 
     return [
         {"role": "system", "content": sys_prompt},
@@ -142,7 +135,7 @@ def main() -> int:
     dataset_path = Path(args.dataset)
     dataset_format = resolve_dataset_format(dataset_path, args.dataset_format)
     if dataset_format != "swebench_lite":
-        print("Bu script yalnizca swebench_lite formatini destekler.")
+        print("This script only supports the swebench_lite format.")
         return 1
 
     output = load_dataset_with_adapter(
@@ -152,7 +145,7 @@ def main() -> int:
     )
     rows = output.rows
     if not rows:
-        print("SWE-bench veri satiri bulunamadi.")
+        print("No SWE-bench data rows found.")
         return 1
 
     client = OpenAI(base_url=settings.base_url, api_key=settings.api_key)
@@ -226,22 +219,13 @@ def main() -> int:
         json.dumps(details, ensure_ascii=False, indent=2), encoding="utf-8"
     )
 
-    if args.language == "en":
-        print("Evaluation completed.")
-        print(f"Summary: {out_dir / 'summary.json'}")
-        print(f"Details: {out_dir / 'details.json'}")
-        print(
-            f"Scores -> valid_json: {summary['valid_json_rate']}, "
-            f"complete_plan: {summary['complete_plan_rate']}"
-        )
-    else:
-        print("Degerlendirme tamamlandi.")
-        print(f"Ozet: {out_dir / 'summary.json'}")
-        print(f"Detay: {out_dir / 'details.json'}")
-        print(
-            f"Skorlar -> valid_json: {summary['valid_json_rate']}, "
-            f"complete_plan: {summary['complete_plan_rate']}"
-        )
+    print("Evaluation completed.")
+    print(f"Summary: {out_dir / 'summary.json'}")
+    print(f"Details: {out_dir / 'details.json'}")
+    print(
+        f"Scores -> valid_json: {summary['valid_json_rate']}, "
+        f"complete_plan: {summary['complete_plan_rate']}"
+    )
     return 0
 
 

@@ -13,67 +13,67 @@ from .report import write_run_artifacts
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Aciklanabilir Ajan MVP (OpenAI-compatible yerel LLM)."
+        description="Explainable Agent MVP (OpenAI-compatible local LLM)."
     )
-    parser.add_argument("--task", type=str, help="Ajan icin gorev metni.")
+    parser.add_argument("--task", type=str, help="Task text for the agent.")
     parser.add_argument(
         "--model",
         type=str,
         default=None,
-        help="Kullanilacak model id (varsayilan: AGENT_MODEL veya gpt-oss-20b).",
+        help="Model ID to use (default: AGENT_MODEL or gpt-oss-20b).",
     )
     parser.add_argument(
         "--reasoning-effort",
         type=str,
         choices=["low", "medium", "high"],
         default=None,
-        help="gpt-oss-20b icin thinking seviyesi.",
+        help="Reasoning effort level.",
     )
     parser.add_argument(
         "--max-steps",
         type=int,
         default=None,
-        help="Ajanin maksimum adim sayisi.",
+        help="Maximum number of agent steps.",
     )
     parser.add_argument(
         "--base-url",
         type=str,
         default=None,
-        help="OpenAI-compatible API taban adresi, ornek: http://localhost:1234/v1",
+        help="OpenAI-compatible API base URL, e.g. http://localhost:1234/v1",
     )
     parser.add_argument(
         "--api-key",
         type=str,
         default=None,
-        help="API anahtari (varsayilan: local).",
+        help="API key (default: local).",
     )
     parser.add_argument(
         "--workspace",
         type=str,
         default=None,
-        help="Dosya araclari icin calisma klasoru koku.",
+        help="Workspace root directory for file tools.",
     )
     parser.add_argument(
         "--runs-dir",
         type=str,
         default=None,
-        help="Calisma trace ve raporlarinin yazilacagi klasor.",
+        help="Directory for writing run traces and reports.",
     )
     parser.add_argument(
         "--sqlite-db",
         type=str,
         default=None,
-        help="Workspace'e gore SQLite DB yolu (varsayilan: data/agent.db).",
+        help="SQLite DB path relative to workspace (default: data/agent.db).",
     )
     parser.add_argument(
         "--list-models",
         action="store_true",
-        help="Sunucuda yuklu modelleri listele.",
+        help="List installed models on the server.",
     )
     parser.add_argument(
         "--verbose",
         action="store_true",
-        help="Adimlari terminalde renkli yazdir.",
+        help="Print steps to terminal with colors.",
     )
     return parser
 
@@ -106,32 +106,32 @@ def main() -> int:
         try:
             model_ids = client.list_models()
         except Exception as exc:  # noqa: BLE001
-            print(f"Model listesi alinamadi: {exc}")
+            print(f"Failed to get model list: {exc}")
             return 1
         if not model_ids:
-            print("Sunucuda yuklu model yok.")
+            print("No models installed on the server.")
             return 0
-        print("Yuklu modeller:")
+        print("Installed models:")
         for mid in model_ids:
             print(f"- {mid}")
         return 0
 
     if not args.task:
-        parser.error("--task zorunludur (yalniz --list-models kullanilmiyorsa).")
+        parser.error("--task is required (unless using --list-models).")
 
     agent = ExplainableAgent(settings=settings, client=client, verbose=args.verbose)
     try:
         trace = agent.run(args.task)
     except Exception as exc:  # noqa: BLE001
-        print(f"Ajan calismasi basarisiz: {exc}")
+        print(f"Agent execution failed: {exc}")
         return 1
 
     trace_path, report_path = write_run_artifacts(trace, settings.runs_dir)
-    print("Nihai cevap:")
+    print("Final answer:")
     print(trace.final_answer)
     print("")
-    print(f"Trace (kisa): {trace_path}")
-    print(f"Rapor: {report_path}")
+    print(f"Trace (compact): {trace_path}")
+    print(f"Report: {report_path}")
     return 0
 
 

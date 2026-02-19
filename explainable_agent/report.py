@@ -79,75 +79,75 @@ def _to_compact_trace(trace: RunTrace) -> dict[str, object]:
 
 def _to_markdown_report(trace: RunTrace) -> str:
     lines: list[str] = []
-    lines.append("# Aciklanabilir Ajan Calisma Raporu")
+    lines.append("# Explainable Agent Run Report")
     lines.append("")
-    lines.append(f"- Calisma ID: `{trace.run_id}`")
-    lines.append(f"- Istenen model: `{trace.requested_model}`")
-    lines.append(f"- Kullanilan model: `{trace.resolved_model}`")
-    lines.append(f"- Baslangic: `{trace.started_at_utc}`")
-    lines.append(f"- Bitis: `{trace.finished_at_utc}`")
+    lines.append(f"- Run ID: `{trace.run_id}`")
+    lines.append(f"- Requested model: `{trace.requested_model}`")
+    lines.append(f"- Resolved model: `{trace.resolved_model}`")
+    lines.append(f"- Started at: `{trace.started_at_utc}`")
+    lines.append(f"- Finished at: `{trace.finished_at_utc}`")
     lines.append("")
-    lines.append("## Gorev")
+    lines.append("## Task")
     lines.append("")
     lines.append(trace.task)
     lines.append("")
-    lines.append("## Nihai Cevap")
+    lines.append("## Final Answer")
     lines.append("")
-    lines.append(trace.final_answer or "(bos)")
+    lines.append(trace.final_answer or "(empty)")
     lines.append("")
-    lines.append("## Faithfulness Kontrolu")
+    lines.append("## Faithfulness Check")
     lines.append("")
-    lines.append(f"- Muhtemel faithfulness: `{trace.faithfulness.likely_faithful}`")
+    lines.append(f"- Likely faithful: `{trace.faithfulness.likely_faithful}`")
     lines.append(
-        f"- Sozcuk benzerligi: `{trace.faithfulness.lexical_similarity:.3f}` "
-        f"(esik `{trace.faithfulness.threshold:.2f}`)"
+        f"- Lexical similarity: `{trace.faithfulness.lexical_similarity:.3f}` "
+        f"(threshold `{trace.faithfulness.threshold:.2f}`)"
     )
     lines.append(
-        f"- Arac destek skoru: `{trace.faithfulness.tool_support_score:.3f}` "
-        f"(esik `{trace.faithfulness.support_threshold:.2f}`)"
+        f"- Tool support score: `{trace.faithfulness.tool_support_score:.3f}` "
+        f"(threshold `{trace.faithfulness.support_threshold:.2f}`)"
     )
-    lines.append(f"- Not: {trace.faithfulness.note}")
-    lines.append(f"- Alternatif cevap: {trace.faithfulness.alternative_answer}")
+    lines.append(f"- Note: {trace.faithfulness.note}")
+    lines.append(f"- Alternative answer: {trace.faithfulness.alternative_answer}")
     lines.append("")
-    lines.append("## Adim Logu")
+    lines.append("## Step Log")
     lines.append("")
     for step in trace.steps:
         lines.append(f"### Step {step.step}")
-        lines.append(f"- Eylem: `{step.decision.action}`")
+        lines.append(f"- Action: `{step.decision.action}`")
         if step.audit.get("source"):
-            lines.append(f"- Karar kaynagi: `{step.audit.get('source')}`")
+            lines.append(f"- Decision source: `{step.audit.get('source')}`")
         if step.audit.get("why_tool"):
-            lines.append(f"- Neden bu arac/aksiyon: {step.audit.get('why_tool')}")
-        lines.append(f"- Gerekce: {step.decision.rationale}")
-        lines.append(f"- Guven: `{step.decision.confidence:.2f}`")
-        lines.append(f"- Kanit: {', '.join(step.decision.evidence)}")
+            lines.append(f"- Why this tool/action: {step.audit.get('why_tool')}")
+        lines.append(f"- Rationale: {step.decision.rationale}")
+        lines.append(f"- Confidence: `{step.decision.confidence:.2f}`")
+        lines.append(f"- Evidence: {', '.join(step.decision.evidence)}")
         if step.decision.error_analysis:
-            lines.append(f"- **Hata Analizi (Self-Correction):** {step.decision.error_analysis}")
+            lines.append(f"- **Error Analysis (Self-Correction):** {step.decision.error_analysis}")
         if step.decision.proposed_fix:
-            lines.append(f"- **Onerilen Cozum:** {step.decision.proposed_fix}")
+            lines.append(f"- **Proposed Fix:** {step.decision.proposed_fix}")
         if step.audit.get("notes"):
-            lines.append(f"- Notlar: {', '.join(step.audit.get('notes', []))}")
+            lines.append(f"- Notes: {', '.join(step.audit.get('notes', []))}")
         if step.audit.get("warnings"):
-            lines.append(f"- Uyarilar: {', '.join(step.audit.get('warnings', []))}")
+            lines.append(f"- Warnings: {', '.join(step.audit.get('warnings', []))}")
         if step.decision.tool_name:
-            lines.append(f"- Arac: `{step.decision.tool_name}`")
-            lines.append(f"- Arac girdisi: `{step.decision.tool_input}`")
+            lines.append(f"- Tool: `{step.decision.tool_name}`")
+            lines.append(f"- Tool input: `{step.decision.tool_input}`")
         if step.tool_output is not None:
-            lines.append(f"- Arac cikisi: `{_compact(step.tool_output)}`")
-        lines.append(f"- Gecikme: `{step.latency_ms} ms`")
+            lines.append(f"- Tool output: `{_compact(step.tool_output)}`")
+        lines.append(f"- Latency: `{step.latency_ms} ms`")
         lines.append("")
     if trace.errors:
-        lines.append("## Hatalar")
+        lines.append("## Errors")
         lines.append("")
         for err in trace.errors:
             lines.append(f"- {err}")
         lines.append("")
 
-    lines.append("## Ajan Teshis ve Iyilestirme Onerileri (Diagnostics)")
+    lines.append("## Agent Diagnostics and Improvement Suggestions")
     lines.append("")
     diagnostics = _generate_diagnostics(trace)
     if not diagnostics:
-        lines.append("- Ajan gorevi sorunsuz tamamladi, ozel bir iyilestirme onerisi yok.")
+        lines.append("- Agent completed the task without issues, no specific improvement suggestion.")
     else:
         for diag in diagnostics:
             lines.append(f"- {diag}")
@@ -159,31 +159,31 @@ def _to_markdown_report(trace: RunTrace) -> str:
 def _generate_diagnostics(trace: RunTrace) -> list[str]:
     suggestions: list[str] = []
     
-    # 1. Self-Correction (Hata Ayiklama) Basarisi Analizi
+    # 1. Self-Correction Success Analysis
     error_steps = [s for s in trace.steps if s.decision.error_analysis]
     if error_steps:
-        suggestions.append(f"Ajan {len(error_steps)} kez hata ile karsilasti ve self-correction (kendi kendini duzeltme) yetenegini kullandi.")
+        suggestions.append(f"Agent encountered an error {len(error_steps)} times and used self-correction ability.")
         last_error = error_steps[-1]
-        suggestions.append(f"  > Son karsilasilan sorun: '{last_error.decision.error_analysis}'")
-        suggestions.append(f"  > Onerilen duzeltme: '{last_error.decision.proposed_fix}'")
+        suggestions.append(f"  > Last encountered issue: '{last_error.decision.error_analysis}'")
+        suggestions.append(f"  > Proposed fix: '{last_error.decision.proposed_fix}'")
     
-    # 2. Arka arkaya ayni aracin kullanilmasi (Looping/Stuck)
+    # 2. Repeated tool usage (Looping/Stuck)
     tool_names = [s.decision.tool_name for s in trace.steps if s.decision.tool_name]
     if len(tool_names) > 2:
         for i in range(len(tool_names) - 2):
             if tool_names[i] == tool_names[i+1] == tool_names[i+2]:
-                suggestions.append(f"DIKKAT: Ajan `{tool_names[i]}` aracini arka arkaya 3 kez cagirdi. Bu bir sonsuz dongu (loop) isareti olabilir. Prompt'a bu aracla ilgili daha net talimatlar ekleyin.")
+                suggestions.append(f"WARNING: Agent called the `{tool_names[i]}` tool 3 times in a row. This might be a sign of an infinite loop. Consider adding clearer instructions to the prompt regarding this tool.")
                 break
 
-    # 3. Dusuk Guven (Confidence) Analizi
+    # 3. Low Confidence Analysis
     low_conf_steps = [s for s in trace.steps if s.decision.confidence < 0.5]
     if low_conf_steps:
         avg_conf = sum(s.decision.confidence for s in low_conf_steps) / len(low_conf_steps)
-        suggestions.append(f"Ajan bazi adimlarda cok dusuk guven skoru ({avg_conf:.2f}) sergiledi. Sisteme daha fazla baglam (context) veya web aramasi gibi ekstra bilgi araclari saglamayi dusunun.")
+        suggestions.append(f"Agent showed very low confidence score ({avg_conf:.2f}) in some steps. Consider providing more context to the system or extra information tools like web search.")
 
-    # 4. Faithfulness (Sadakat) Analizi
+    # 4. Faithfulness Analysis
     if trace.faithfulness.tool_support_score > 0 and not trace.faithfulness.likely_faithful:
-        suggestions.append("SADAKAT UYARISI: Ajan araci basariyla kullandi fakat verdigi nihai cevap arac ciktisiyla yeterince ortusmuyor (Halusinasyon riski). Prompt'a 'Sadece aractan gelen veriyi kullan, kendi yorumunu katma' kuralini ekleyin.")
+        suggestions.append("FAITHFULNESS WARNING: Agent used the tool successfully but the final answer does not sufficiently overlap with the tool output (Hallucination risk). Add the rule 'Only use the data coming from the tool, do not add your own interpretation' to the prompt.")
         
     return suggestions
 

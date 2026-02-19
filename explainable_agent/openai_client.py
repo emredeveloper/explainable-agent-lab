@@ -61,7 +61,7 @@ class OpenAICompatClient:
         model_ids = self.list_models()
         if not model_ids:
             raise RuntimeError(
-                "API ulasilabilir ama yuklu model yok. Sunucuda model yukleyip tekrar deneyin."
+                "API reachable but no model loaded. Please load a model on the server and try again."
             )
         if requested_model in model_ids:
             return requested_model
@@ -71,7 +71,7 @@ class OpenAICompatClient:
             return partial_matches[0]
         available = ", ".join(model_ids)
         raise RuntimeError(
-            f"Istenen model bulunamadi: '{requested_model}'. Yuklu modeller: {available}"
+            f"Requested model not found: '{requested_model}'. Loaded models: {available}"
         )
 
     def get_decision(
@@ -123,31 +123,31 @@ class OpenAICompatClient:
 
     @staticmethod
     def _build_decision_prompt(reasoning_effort: str) -> str:
-        return f"""Aciklanabilir bir ajan planlayicisisin.
+        return f"""You are an explainable agent planner.
 Reasoning effort: {reasoning_effort}.
-Her turda sadece tek bir sonraki adimi sec ve sadece JSON dondur.
+Select only one next step per turn and return ONLY JSON.
 
-Kurallar:
-- Dis bilgi, dosya, SQL ya da hesaplama gerekiyorsa action="tool_call" sec.
-- Bilgi yeterliyse action="final_answer" sec.
-- confidence 0 ile 1 arasinda olmali.
-- evidence alanina kararini destekleyen somut sinyalleri yaz.
-- action="tool_call" ise tool_name ve tool_input doldur.
-- action="final_answer" ise answer doldur.
-- Eger onceki aractan bir HATA (ERROR) donduyse:
-  1. Hatanin nedenini "error_analysis" alanina kisaca yaz.
-  2. Nasil duzeltecegini "proposed_fix" alanina kisaca yaz.
-  3. Ardindan MUTLAKA HATA'yi cozmek icin "action": "tool_call" YAP ve "tool_name" alanina yeni cagirmak istedigin aracin adini YAZ. Eger yeni arac cagirmazsan hata cozulmez!
-  4. Yeni aracin "tool_input" alanini da mutlaka doldur.
-  5. Sadece ve sadece eger hatayi cozmek icin kullanilabilecek hicbir arac kalmadiysa "action": "final_answer" yapip durumu "answer" icinde acikla.
-- Cevapta dusunce zinciri veya ekstra metin verme; yalniz JSON ver.
+Rules:
+- If external info, file, SQL, or calculation is needed, set action="tool_call".
+- If you have enough info, set action="final_answer".
+- confidence must be between 0 and 1.
+- Write concrete signals supporting your decision in the evidence field.
+- If action="tool_call", fill in tool_name and tool_input.
+- If action="final_answer", fill in answer.
+- If you got an ERROR from the previous tool:
+  1. Briefly write the reason for the error in "error_analysis".
+  2. Briefly write how to fix it in "proposed_fix".
+  3. Then you MUST set "action": "tool_call" to fix the ERROR and write the new tool's name in "tool_name". The error won't be fixed unless you call a new tool!
+  4. Also, make sure to fill the "tool_input" field for the new tool.
+  5. Only if absolutely no tool can fix the error, set "action": "final_answer" and explain the situation in "answer".
+- Do not include any chain of thought or extra text in your response; output ONLY JSON.
 """
 
     @staticmethod
     def _build_final_prompt(reasoning_effort: str) -> str:
         return f"""Reasoning effort: {reasoning_effort}.
-Kullanici gorevini arac kullanmadan dogrudan cevapla.
-Yanit kisa, net ve Turkce olsun."""
+Answer the user task directly without using tools.
+The response should be short, clear, and in English."""
 
     @staticmethod
     def _parse_json_payload(content: str) -> dict[str, Any]:
@@ -219,7 +219,7 @@ Yanit kisa, net ve Turkce olsun."""
         if action not in {"tool_call", "final_answer"}:
             action = "final_answer"
 
-        rationale = str(payload.get("rationale", "")).strip() or "Gerekce belirtilmedi."
+        rationale = str(payload.get("rationale", "")).strip() or "No rationale provided."
         raw_confidence = payload.get("confidence", 0.5)
         try:
             confidence = float(raw_confidence)
@@ -233,7 +233,7 @@ Yanit kisa, net ve Turkce olsun."""
         else:
             evidence = [str(raw_evidence)] if str(raw_evidence).strip() else []
         if not evidence:
-            evidence = ["Acik kanit belirtilmedi."]
+            evidence = ["No explicit evidence provided."]
 
         tool_name = payload.get("tool_name")
         tool_input = payload.get("tool_input")
@@ -264,13 +264,13 @@ Yanit kisa, net ve Turkce olsun."""
                 str(answer).strip()
                 if answer
                 else (
-                     "Hata analizi yapildi ancak yeni arac belirtilmedi." 
-                     if error_analysis else "Arac cagrisi istendi ama tool_name eksik."
+                     "Error analysis done but no new tool specified." 
+                     if error_analysis else "Tool call requested but tool_name is missing."
                 )
             )
         if action == "final_answer":
             if not answer:
-                answer = fallback_text.strip() or "Nihai cevap saglanmadi."
+                answer = fallback_text.strip() or "No final answer provided."
             return Decision(
                 action="final_answer",
                 rationale=rationale,
