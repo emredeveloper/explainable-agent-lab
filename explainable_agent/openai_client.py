@@ -136,6 +136,14 @@ Yanit kisa, net ve Turkce olsun."""
         content = content.strip()
         if not content:
             return {}
+
+        # Remove markdown code block fences if present (e.g. ```json ... ```)
+        if content.startswith("```"):
+            lines = content.splitlines()
+            if len(lines) >= 2:
+                # Remove the first line (```json) and the last line (```)
+                content = "\n".join(lines[1:-1]).strip()
+
         try:
             data = json.loads(content)
             if isinstance(data, dict):
@@ -150,7 +158,24 @@ Yanit kisa, net ve Turkce olsun."""
                 if isinstance(data, dict):
                     return data
             except json.JSONDecodeError:
-                return {}
+                # Fallback to relax parsing for LLMs if standard fails
+                pass
+
+        try:
+            from json_repair import repair_json
+            repaired = repair_json(content, return_objects=True)
+            if isinstance(repaired, dict):
+                return repaired
+            
+            if candidate:
+                repaired_candidate = repair_json(candidate, return_objects=True)
+                if isinstance(repaired_candidate, dict):
+                    return repaired_candidate
+        except ImportError:
+            pass
+        except Exception:
+            pass
+
         return {}
 
     @staticmethod
