@@ -70,6 +70,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Sunucuda yuklu modelleri listele.",
     )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Adimlari terminalde renkli yazdir.",
+    )
     return parser
 
 
@@ -114,7 +119,7 @@ def main() -> int:
     if not args.task:
         parser.error("--task zorunludur (yalniz --list-models kullanilmiyorsa).")
 
-    agent = ExplainableAgent(settings=settings, client=client)
+    agent = ExplainableAgent(settings=settings, client=client, verbose=args.verbose)
     try:
         trace = agent.run(args.task)
     except Exception as exc:  # noqa: BLE001

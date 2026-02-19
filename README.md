@@ -9,7 +9,10 @@ This repository is built for two things:
 ## What You Get
 
 - Structured agent decisions per step:
-  - `action`, `confidence`, `rationale`, `evidence`
+  - `action`, `confidence`, `rationale`, `evidence`, `error_analysis`, `proposed_fix`
+- **Self-Healing (Kendi Kendini Düzeltme):** Hata anında ajanın hatayı analiz edip alternatif çözüm (tool) üretebilme yeteneği.
+- **Terminalde Görsel İzleme (Verbose Modu):** Zengin (rich) kütüphanesi ile terminalde renkli, etkileşimli adım adım izleme imkanı.
+- **Detaylı İyileştirme Raporları (Diagnostics):** Her çalışma sonunda ajan performansı, hata oranları ve sonsuz döngü (loop) riskleri hakkında somut öneriler sunan raporlar.
 - Tool execution traces with audit metadata
 - Faithfulness signals:
   - alternative answer similarity
@@ -69,6 +72,12 @@ Run the agent:
 
 ```bash
 python -m explainable_agent.cli --model gpt-oss-20b --reasoning-effort high --task "calculate_math: (215*4)-12"
+```
+
+Run with visual trace in terminal:
+
+```bash
+python -m explainable_agent.cli --task "sqlite_query: SELECT name, email FROM customers" --verbose
 ```
 
 Or via console entrypoint:

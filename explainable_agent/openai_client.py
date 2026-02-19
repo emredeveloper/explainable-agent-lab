@@ -28,8 +28,20 @@ DECISION_SCHEMA = {
                 "tool_name": {"type": ["string", "null"]},
                 "tool_input": {"type": ["string", "null"]},
                 "answer": {"type": ["string", "null"]},
+                "error_analysis": {"type": ["string", "null"]},
+                "proposed_fix": {"type": ["string", "null"]},
             },
-            "required": ["action", "rationale", "confidence", "evidence"],
+            "required": [
+                "action",
+                "rationale",
+                "confidence",
+                "evidence",
+                "tool_name",
+                "tool_input",
+                "answer",
+                "error_analysis",
+                "proposed_fix"
+            ],
             "additionalProperties": False,
         },
         "strict": True,
@@ -122,6 +134,12 @@ Kurallar:
 - evidence alanina kararini destekleyen somut sinyalleri yaz.
 - action="tool_call" ise tool_name ve tool_input doldur.
 - action="final_answer" ise answer doldur.
+- Eger onceki aractan bir HATA (ERROR) donduyse:
+  1. Hatanin nedenini "error_analysis" alanina kisaca yaz.
+  2. Nasil duzeltecegini "proposed_fix" alanina kisaca yaz.
+  3. Ardindan MUTLAKA HATA'yi cozmek icin "action": "tool_call" YAP ve "tool_name" alanina yeni cagirmak istedigin aracin adini YAZ. Eger yeni arac cagirmazsan hata cozulmez!
+  4. Yeni aracin "tool_input" alanini da mutlaka doldur.
+  5. Sadece ve sadece eger hatayi cozmek icin kullanilabilecek hicbir arac kalmadiysa "action": "final_answer" yapip durumu "answer" icinde acikla.
 - Cevapta dusunce zinciri veya ekstra metin verme; yalniz JSON ver.
 """
 
@@ -220,13 +238,35 @@ Yanit kisa, net ve Turkce olsun."""
         tool_name = payload.get("tool_name")
         tool_input = payload.get("tool_input")
         answer = payload.get("answer")
+        error_analysis = payload.get("error_analysis")
+        proposed_fix = payload.get("proposed_fix")
+
+        # Eğer error_analysis ve proposed_fix dolduysa ve action tool_call ama name eksikse,
+        # aracı doğrudan sqlite_describe_table olarak düzeltmeye çalışmak yerine modelden geleni kullansın,
+        # fakat name eksikse bir sorun var. Biz yine de action tool_call ama tool_name eksik durumunu final_answer'a çeviriyoruz.
+        # Aslında hatayı gördüyse ve çözüm sunduysa yeni bir tool call yapabilmeliydi.
+        # Eger hata analizini yazdiysa ve "action" = "tool_call" verdiyse ama "tool_name" unuttuysa
+        # veya "action" = "final_answer" verdi ama "tool_name" de verdiyse (ikincisi garip),
+        # biz her durumda asagidaki kontrolu yapiyoruz:
+        if error_analysis and proposed_fix and action == "final_answer":
+            # Model belki bir arac cagirmak istedi ama yanlislikla action'i final_answer birakti
+            # ya da "yeni arac belirtilmedi" mesajini yazdi.
+            # Eger tool_name verdiyse onu dinleyip tool_call'a cevirebiliriz:
+            if tool_name:
+                action = "tool_call"
+            else:
+                # Eger tool_name vermediyse model gercekten durmustur, bir sey yapamayiz.
+                pass
 
         if action == "tool_call" and not tool_name:
             action = "final_answer"
             answer = (
                 str(answer).strip()
                 if answer
-                else "Arac cagrisi istendi ama tool_name eksik."
+                else (
+                     "Hata analizi yapildi ancak yeni arac belirtilmedi." 
+                     if error_analysis else "Arac cagrisi istendi ama tool_name eksik."
+                )
             )
         if action == "final_answer":
             if not answer:
@@ -237,6 +277,8 @@ Yanit kisa, net ve Turkce olsun."""
                 confidence=confidence,
                 evidence=evidence,
                 answer=str(answer).strip(),
+                error_analysis=str(error_analysis).strip() if error_analysis else None,
+                proposed_fix=str(proposed_fix).strip() if proposed_fix else None,
             )
 
         return Decision(
@@ -246,4 +288,6 @@ Yanit kisa, net ve Turkce olsun."""
             evidence=evidence,
             tool_name=str(tool_name).strip(),
             tool_input=str(tool_input or "").strip(),
+            error_analysis=str(error_analysis).strip() if error_analysis else None,
+            proposed_fix=str(proposed_fix).strip() if proposed_fix else None,
         )

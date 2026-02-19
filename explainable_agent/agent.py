@@ -16,6 +16,12 @@ from .tools import (
     tools_without_input,
 )
 
+from rich.console import Console
+from rich.panel import Panel
+from rich.text import Text
+
+console = Console()
+
 
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -288,11 +294,54 @@ def _build_step_audit(
 
 
 class ExplainableAgent:
-    def __init__(self, settings: Settings, client: OpenAICompatClient | None = None) -> None:
+    def __init__(self, settings: Settings, client: OpenAICompatClient | None = None, verbose: bool = False) -> None:
         self.settings = settings
         self.client = client or OpenAICompatClient(
             base_url=settings.base_url, api_key=settings.api_key
         )
+        self.verbose = verbose
+
+    def _print_step(self, step_num: int, decision: Decision, tool_output: str | None = None):
+        if not self.verbose:
+            return
+            
+        action_color = "bold blue" if decision.action == "tool_call" else "bold green"
+        
+        content = Text()
+        content.append(f"Gerekce: ", style="bold")
+        content.append(f"{decision.rationale}\n")
+        
+        conf_color = "red" if decision.confidence < 0.5 else "yellow" if decision.confidence < 0.8 else "green"
+        content.append(f"Guven: ", style="bold")
+        content.append(f"{decision.confidence:.2f}\n", style=conf_color)
+        
+        if decision.action == "tool_call":
+            content.append(f"Arac: ", style="bold")
+            content.append(f"{decision.tool_name}\n", style="magenta")
+            content.append(f"Girdi: ", style="bold")
+            content.append(f"{decision.tool_input}\n")
+            if tool_output:
+                out_preview = tool_output[:300] + "..." if len(tool_output) > 300 else tool_output
+                content.append(f"Cikti: ", style="bold")
+                content.append(f"{out_preview}\n", style="dim")
+        else:
+            content.append(f"Nihai Cevap: ", style="bold")
+            content.append(f"{decision.answer}\n", style="bold white")
+            
+        if decision.error_analysis:
+            content.append(f"\nHata Analizi: ", style="bold red")
+            content.append(f"{decision.error_analysis}\n")
+        if decision.proposed_fix:
+            content.append(f"Onerilen Cozum: ", style="bold yellow")
+            content.append(f"{decision.proposed_fix}\n")
+
+        panel = Panel(
+            content,
+            title=f"Adim {step_num} | Aksiyon: {decision.action}",
+            border_style=action_color,
+            expand=False
+        )
+        console.print(panel)
 
     def run(self, task: str) -> RunTrace:
         run_id = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S") + "_" + uuid4().hex[
@@ -362,15 +411,18 @@ class ExplainableAgent:
                     ),
                 }
             )
+
+            explicit_next_prompt = "Arac sonucuna gore Turkce ve kisa bir nihai cevap ver. JSON formatina uygun karar dondur."
+            if tool_output and tool_output.startswith("ERROR:"):
+                explicit_next_prompt = "Onceki aractan HATA alindi. Lutfen JSON icindeki 'error_analysis' ve 'proposed_fix' alanlarini kullanarak hatanin nedenini ve nasil cozulecegini belirt. DIKKAT: Hatayi cozmek icin MUTLAKA action='tool_call' yaparak yeni bir arac cagir. Ayrica JSON icinde 'tool_name' ve 'tool_input' alanlarini doldurmayi KESINLIKLE UNUTMA!"
+
             messages.append(
                 {
                     "role": "user",
-                    "content": (
-                        "Arac sonucuna gore Turkce ve kisa bir nihai cevap ver. "
-                        "JSON formatina uygun karar dondur."
-                    ),
+                    "content": explicit_next_prompt,
                 }
             )
+            self._print_step(1, steps[0].decision, tool_output)
             loop_start = 2
 
         for step in range(loop_start, self.settings.max_steps + 1):
@@ -451,14 +503,18 @@ class ExplainableAgent:
                         ),
                     )
                 )
+                self._print_step(step, decision, tool_output)
                 messages.append({"role": "assistant", "content": raw_output})
+                content_text = f"Arac sonucu ('{decision.tool_name}'):\n{tool_output}\n\n"
+                if tool_output and tool_output.startswith("ERROR:"):
+                    content_text += "Onceki aractan HATA alindi. Lutfen JSON icindeki 'error_analysis' ve 'proposed_fix' alanlarini kullanarak hatanin nedenini ve nasil cozulecegini belirt. DIKKAT: Hatayi cozmek icin MUTLAKA action='tool_call' yaparak yeni bir arac cagir. Sadece cozum bulamiyorsan final_answer kullan. Ayrica JSON icinde 'tool_name' ve 'tool_input' alanlarini doldurmayi KESINLIKLE UNUTMA!"
+                else:
+                    content_text += "Siradaki adimi sec."
+
                 messages.append(
                     {
                         "role": "user",
-                        "content": (
-                            f"Arac sonucu ('{decision.tool_name}'):\n{tool_output}\n\n"
-                            "Siradaki adimi sec."
-                        ),
+                        "content": content_text,
                     }
                 )
                 continue
@@ -480,6 +536,7 @@ class ExplainableAgent:
                     ),
                 )
             )
+            self._print_step(step, decision)
             break
 
         if not final_answer:
@@ -501,14 +558,7 @@ class ExplainableAgent:
                 )
 
         tool_used = any(step.decision.action == "tool_call" for step in steps)
-        explicit_tool_requested = _extract_explicit_tool_request(task) is not None
-        if tool_used and explicit_tool_requested:
-            fallback = _fallback_answer_from_tool_outputs(steps)
-            if fallback:
-                final_answer = fallback
-                errors.append(
-                    "Acik arac gorevinde nihai cevap, arac sonucundan standartlastirildi."
-                )
+        
         if tool_used and _looks_generic_completion(final_answer):
             fallback = _fallback_answer_from_tool_outputs(steps)
             if fallback:

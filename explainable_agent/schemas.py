@@ -17,6 +17,8 @@ class Decision:
     tool_name: str | None = None
     tool_input: str | None = None
     answer: str | None = None
+    error_analysis: str | None = None
+    proposed_fix: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
