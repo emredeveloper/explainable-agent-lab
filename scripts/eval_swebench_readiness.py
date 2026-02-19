@@ -70,6 +70,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--limit", type=int, default=10)
     parser.add_argument("--runs-dir", type=str, default="runs/evals")
     parser.add_argument(
+        "--language", 
+        type=str, 
+        default="tr", 
+        choices=["tr", "en"], 
+        help="Cikti ve rapor dili (tr veya en)."
+    )
+    parser.add_argument(
         "--max-completion-tokens",
         type=int,
         default=None,
@@ -82,16 +89,22 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _build_messages(problem_statement: str) -> list[dict[str, str]]:
+def _build_messages(problem_statement: str, language: str = "tr") -> list[dict[str, str]]:
+    if language == "en":
+        sys_prompt = (
+            "You are a software issue triage assistant. Return only valid JSON.\n"
+            'Format: {"analysis":{"root_cause_hypothesis":"...","risk":"low|medium|high"},'
+            '"files_to_inspect":["..."],"first_actions":["..."]}'
+        )
+    else:
+        sys_prompt = (
+            "Sen bir yazilim sorunu inceleme asistanisin. Sadece gecerli JSON dondur.\n"
+            'Format: {"analysis":{"root_cause_hypothesis":"...","risk":"low|medium|high"},'
+            '"files_to_inspect":["..."],"first_actions":["..."]}'
+        )
+
     return [
-        {
-            "role": "system",
-            "content": (
-                "You are a software issue triage assistant. Return only valid JSON.\n"
-                'Format: {"analysis":{"root_cause_hypothesis":"...","risk":"low|medium|high"},'
-                '"files_to_inspect":["..."],"first_actions":["..."]}'
-            ),
-        },
+        {"role": "system", "content": sys_prompt},
         {"role": "user", "content": problem_statement},
     ]
 
@@ -152,7 +165,7 @@ def main() -> int:
     for idx, row in enumerate(rows):
         request: dict[str, Any] = {
             "model": model,
-            "messages": _build_messages(str(row["query"])),
+            "messages": _build_messages(str(row["query"]), language=args.language),
             "temperature": 0,
         }
         if args.max_completion_tokens is not None and args.max_completion_tokens > 0:
@@ -213,13 +226,22 @@ def main() -> int:
         json.dumps(details, ensure_ascii=False, indent=2), encoding="utf-8"
     )
 
-    print("Degerlendirme tamamlandi.")
-    print(f"Ozet: {out_dir / 'summary.json'}")
-    print(f"Detay: {out_dir / 'details.json'}")
-    print(
-        f"Skorlar -> valid_json: {summary['valid_json_rate']}, "
-        f"complete_plan: {summary['complete_plan_rate']}"
-    )
+    if args.language == "en":
+        print("Evaluation completed.")
+        print(f"Summary: {out_dir / 'summary.json'}")
+        print(f"Details: {out_dir / 'details.json'}")
+        print(
+            f"Scores -> valid_json: {summary['valid_json_rate']}, "
+            f"complete_plan: {summary['complete_plan_rate']}"
+        )
+    else:
+        print("Degerlendirme tamamlandi.")
+        print(f"Ozet: {out_dir / 'summary.json'}")
+        print(f"Detay: {out_dir / 'details.json'}")
+        print(
+            f"Skorlar -> valid_json: {summary['valid_json_rate']}, "
+            f"complete_plan: {summary['complete_plan_rate']}"
+        )
     return 0
 
 

@@ -138,6 +138,13 @@ def parse_args() -> argparse.Namespace:
         help="Reasoning effort seviyesi.",
     )
     parser.add_argument(
+        "--language",
+        type=str,
+        choices=["tr", "en"],
+        default="tr",
+        help="Cikti dili (tr veya en)."
+    )
+    parser.add_argument(
         "--limit",
         type=int,
         default=None,
@@ -934,33 +941,50 @@ def _extract_second_date(text: str) -> datetime | None:
         return None
 
 
-def _build_messages(sample: dict[str, Any], reasoning_effort: str) -> list[dict[str, str]]:
+def _build_messages(sample: dict[str, Any], reasoning_effort: str, language: str = "tr") -> list[dict[str, str]]:
     query = sample["query"]
     tools = sample["tools"]
+    
+    if language == "en":
+        sys_prompt = (
+            "You are a tool-calling evaluator.\n"
+            f"Reasoning effort: {reasoning_effort}.\n"
+            "Extract the required list of tool calls based on the user's request.\n"
+            "Rules:\n"
+            "- Use only the provided tool names.\n"
+            "- Return only valid JSON.\n"
+            "- Do not write plain text, markdown, or explanations.\n"
+            "- If there are comparisons or multiple choices, return multiple tool_calls.\n"
+            "- Stop output as soon as the JSON ends."
+        )
+        user_prompt = (
+            f"Query:\n{query}\n\n"
+            f"Tools:\n{json.dumps(tools, ensure_ascii=False)}\n\n"
+            "Output format:\n"
+            '{"tool_calls":[{"name":"...","arguments":{...}}]}'
+        )
+    else:
+        sys_prompt = (
+            "Tool-calling degerlendiricisisin.\n"
+            f"Reasoning effort: {reasoning_effort}.\n"
+            "Kullanicinin istegine gore gerekli tool cagri listesini cikart.\n"
+            "Kurallar:\n"
+            "- Sadece verilen tool adlarini kullan.\n"
+            "- Cevap sadece JSON olsun.\n"
+            "- Duz metin, markdown, aciklama yazma.\n"
+            "- Karsilastirma/iki farkli secenek varsa birden fazla tool_call dondur.\n"
+            "- JSON bittigi anda ciktiyi durdur."
+        )
+        user_prompt = (
+            f"Sorgu:\n{query}\n\n"
+            f"Toollar:\n{json.dumps(tools, ensure_ascii=False)}\n\n"
+            "Cikti formati:\n"
+            '{"tool_calls":[{"name":"...","arguments":{...}}]}'
+        )
+
     return [
-        {
-            "role": "system",
-            "content": (
-                "Tool-calling degerlendiricisisin.\n"
-                f"Reasoning effort: {reasoning_effort}.\n"
-                "Kullanicinin istegine gore gerekli tool cagri listesini cikart.\n"
-                "Kurallar:\n"
-                "- Sadece verilen tool adlarini kullan.\n"
-                "- Cevap sadece JSON olsun.\n"
-                "- Duz metin, markdown, aciklama yazma.\n"
-                "- Karsilastirma/iki farkli secenek varsa birden fazla tool_call dondur.\n"
-                "- JSON bittigi anda ciktiyi durdur."
-            ),
-        },
-        {
-            "role": "user",
-            "content": (
-                f"Sorgu:\n{query}\n\n"
-                f"Toollar:\n{json.dumps(tools, ensure_ascii=False)}\n\n"
-                "Cikti formati:\n"
-                '{"tool_calls":[{"name":"...","arguments":{...}}]}'
-            ),
-        },
+        {"role": "system", "content": sys_prompt},
+        {"role": "user", "content": user_prompt},
     ]
 
 
@@ -1033,7 +1057,7 @@ def main() -> int:
     fallback_injected_calls_total = 0
 
     for idx, sample in enumerate(samples):
-        messages = _build_messages(sample, reasoning_effort=reasoning_effort)
+        messages = _build_messages(sample, reasoning_effort=reasoning_effort, language=args.language)
         response = _request_completion(
             client=client,
             model=requested_model,

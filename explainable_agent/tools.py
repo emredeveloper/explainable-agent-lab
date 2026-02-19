@@ -29,6 +29,27 @@ class ToolSpec:
     fn: ToolFn
     requires_input: bool = True
 
+AVAILABLE_TOOLS: dict[str, ToolSpec] = {}
+
+def define_tool(
+    name: str,
+    description: str,
+    usage_hint: str,
+    requires_input: bool = True
+) -> Callable[[ToolFn], ToolFn]:
+    """Decorator to register a tool in the AVAILABLE_TOOLS catalog."""
+    def decorator(fn: ToolFn) -> ToolFn:
+        AVAILABLE_TOOLS[name] = ToolSpec(
+            name=name,
+            description=description,
+            usage_hint=usage_hint,
+            fn=fn,
+            requires_input=requires_input
+        )
+        return fn
+    return decorator
+
+
 
 def _safe_resolve_path(workspace_root: Path, input_path: str) -> Path:
     candidate = (workspace_root / input_path).resolve()
@@ -40,6 +61,11 @@ def _safe_resolve_path(workspace_root: Path, input_path: str) -> Path:
     return candidate
 
 
+@define_tool(
+    name="calculate_math",
+    description="Temel aritmetik ifadeyi hesaplar.",
+    usage_hint="Girdi bir ifade metnidir, ornek: (12.5*4)-7"
+)
 def calculate_math(expression: str, _: Path) -> str:
     expression = expression.strip()
     if not expression:
@@ -76,6 +102,11 @@ def calculate_math(expression: str, _: Path) -> str:
     return str(result)
 
 
+@define_tool(
+    name="read_text_file",
+    description="Calisma klasorundeki UTF-8 metin dosyasini okur.",
+    usage_hint="Girdi goreli dosya yoludur, ornek: docs/notes.txt"
+)
 def read_text_file(input_path: str, workspace_root: Path) -> str:
     try:
         path = _safe_resolve_path(workspace_root, input_path.strip())
@@ -94,6 +125,11 @@ def read_text_file(input_path: str, workspace_root: Path) -> str:
     return content
 
 
+@define_tool(
+    name="list_workspace_files",
+    description="Calisma klasorunde dosyalari listeler.",
+    usage_hint="Girdi '<yol>|<glob>' (glob opsiyonel), ornek: '.' veya '.|*.py'"
+)
 def list_workspace_files(input_path: str, workspace_root: Path) -> str:
     rel, pattern = _parse_list_input(input_path)
     try:
@@ -136,6 +172,12 @@ def _parse_list_input(raw_input: str) -> tuple[str, str]:
     return rel, pattern
 
 
+@define_tool(
+    name="now_utc",
+    description="Guncel UTC zamanini ISO formatinda dondurur.",
+    usage_hint="Girdi bos olabilir.",
+    requires_input=False
+)
 def now_utc(_: str, __: Path) -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -154,6 +196,12 @@ def _resolve_sqlite_db_path(workspace_root: Path) -> Path:
     return _safe_resolve_path(workspace_root, raw)
 
 
+@define_tool(
+    name="sqlite_init_demo",
+    description="Ornek customers/orders tablolariyla demo SQLite DB olusturur.",
+    usage_hint="Girdi bos olabilir.",
+    requires_input=False
+)
 def sqlite_init_demo(_: str, workspace_root: Path) -> str:
     try:
         db_path = _resolve_sqlite_db_path(workspace_root)
@@ -203,6 +251,12 @@ def sqlite_init_demo(_: str, workspace_root: Path) -> str:
     return f"OK: demo sqlite veritabani olusturuldu: {db_path.as_posix()}"
 
 
+@define_tool(
+    name="sqlite_list_tables",
+    description="Ayarlanan DB dosyasindaki SQLite tablolarini listeler.",
+    usage_hint="Girdi bos olabilir.",
+    requires_input=False
+)
 def sqlite_list_tables(_: str, workspace_root: Path) -> str:
     try:
         db_path = _resolve_sqlite_db_path(workspace_root)
@@ -229,6 +283,11 @@ def sqlite_list_tables(_: str, workspace_root: Path) -> str:
     return "TABLOLAR:\n" + "\n".join(names)
 
 
+@define_tool(
+    name="sqlite_describe_table",
+    description="SQLite tablo semasini gosterir.",
+    usage_hint="Girdi tablo adidir, ornek: customers"
+)
 def sqlite_describe_table(table_name: str, workspace_root: Path) -> str:
     name = table_name.strip()
     if not name:
@@ -260,6 +319,11 @@ def sqlite_describe_table(table_name: str, workspace_root: Path) -> str:
     return "\n".join(lines)
 
 
+@define_tool(
+    name="sqlite_query",
+    description="Salt-okuma SQLite sorgusu calistirir (SELECT/PRAGMA/WITH/EXPLAIN).",
+    usage_hint="Girdi SQL sorgu metnidir."
+)
 def sqlite_query(query: str, workspace_root: Path) -> str:
     sql = query.strip()
     if not sql:
@@ -305,6 +369,11 @@ def sqlite_query(query: str, workspace_root: Path) -> str:
     return "\n".join(lines)
 
 
+@define_tool(
+    name="sqlite_execute",
+    description="SQLite yazma SQL'lerini calistirir (CREATE/INSERT/UPDATE/DELETE).",
+    usage_hint="Girdi SQL script metnidir."
+)
 def sqlite_execute(sql_script: str, workspace_root: Path) -> str:
     sql = sql_script.strip()
     if not sql:
@@ -349,65 +418,41 @@ def _format_sql_cell(cell: object) -> str:
     return text.replace("\n", " ").replace("\r", " ")
 
 
-AVAILABLE_TOOLS: dict[str, ToolSpec] = {
-    "calculate_math": ToolSpec(
-        name="calculate_math",
-        description="Temel aritmetik ifadeyi hesaplar.",
-        usage_hint="Girdi bir ifade metnidir, ornek: (12.5*4)-7",
-        fn=calculate_math,
-    ),
-    "read_text_file": ToolSpec(
-        name="read_text_file",
-        description="Calisma klasorundeki UTF-8 metin dosyasini okur.",
-        usage_hint="Girdi goreli dosya yoludur, ornek: docs/notes.txt",
-        fn=read_text_file,
-    ),
-    "list_workspace_files": ToolSpec(
-        name="list_workspace_files",
-        description="Calisma klasorunde dosyalari listeler.",
-        usage_hint="Girdi '<yol>|<glob>' (glob opsiyonel), ornek: '.' veya '.|*.py'",
-        fn=list_workspace_files,
-    ),
-    "now_utc": ToolSpec(
-        name="now_utc",
-        description="Guncel UTC zamanini ISO formatinda dondurur.",
-        usage_hint="Girdi bos olabilir.",
-        fn=now_utc,
-        requires_input=False,
-    ),
-    "sqlite_init_demo": ToolSpec(
-        name="sqlite_init_demo",
-        description="Ornek customers/orders tablolariyla demo SQLite DB olusturur.",
-        usage_hint="Girdi bos olabilir.",
-        fn=sqlite_init_demo,
-        requires_input=False,
-    ),
-    "sqlite_list_tables": ToolSpec(
-        name="sqlite_list_tables",
-        description="Ayarlanan DB dosyasindaki SQLite tablolarini listeler.",
-        usage_hint="Girdi bos olabilir.",
-        fn=sqlite_list_tables,
-        requires_input=False,
-    ),
-    "sqlite_describe_table": ToolSpec(
-        name="sqlite_describe_table",
-        description="SQLite tablo semasini gosterir.",
-        usage_hint="Girdi tablo adidir, ornek: customers",
-        fn=sqlite_describe_table,
-    ),
-    "sqlite_query": ToolSpec(
-        name="sqlite_query",
-        description="Salt-okuma SQLite sorgusu calistirir (SELECT/PRAGMA/WITH/EXPLAIN).",
-        usage_hint="Girdi SQL sorgu metnidir.",
-        fn=sqlite_query,
-    ),
-    "sqlite_execute": ToolSpec(
-        name="sqlite_execute",
-        description="SQLite yazma SQL'lerini calistirir (CREATE/INSERT/UPDATE/DELETE).",
-        usage_hint="Girdi SQL script metnidir.",
-        fn=sqlite_execute,
-    ),
-}
+@define_tool(
+    name="duckduckgo_search",
+    description="DuckDuckGo uzerinden internette gercek zamanli arama yapar.",
+    usage_hint="Girdi aranacak anahtar kelimedir, ornek: Python 3.12 ozellikleri"
+)
+def duckduckgo_search(query: str, _: Path) -> str:
+    query = query.strip()
+    if not query:
+        return "ERROR: Arama sorgusu bos."
+    try:
+        from duckduckgo_search import DDGS
+        ddgs = DDGS()
+        results = list(ddgs.text(query, max_results=5))
+    except ImportError:
+        return "ERROR: duckduckgo-search paketi yuklu degil."
+    except Exception as exc:
+        return f"ERROR: Arama basarisiz: {exc}"
+
+    if not results:
+        return "Bulunamadi."
+    
+    lines = [f"Arama Sonuclari ('{query}'):", ""]
+    for i, res in enumerate(results, 1):
+        lines.append(f"{i}. {res.get('title', 'Baslik Yok')}")
+        lines.append(f"   URL: {res.get('href', 'URL Yok')}")
+        snippet = res.get('body', '')
+        if len(snippet) > 200:
+            snippet = snippet[:197] + "..."
+        lines.append(f"   Ozet: {snippet}")
+        lines.append("")
+    
+    return "\n".join(lines)
+
+
+
 
 
 def tool_catalog_text() -> str:
