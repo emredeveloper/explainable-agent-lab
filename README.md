@@ -59,20 +59,37 @@ Copy `.env.example` and adjust values if needed.
 
 ## Quick Start
 
-1. Open your local OpenAI-compatible server.
-2. Load a model (e.g. `gpt-oss-20b`).
-3. Default endpoint is `http://localhost:1234/v1`.
+You can use any local LLM runner that supports OpenAI-compatible endpoints, such as **LM Studio** or **Ollama**.
 
-List available models:
+### Connecting to LM Studio
+
+1. Open LM Studio and start the local server.
+2. Load a model (e.g. `gpt-oss-20b`).
+3. The default endpoint is `http://localhost:1234/v1`.
+
+### Connecting to Ollama
+
+1. Install and start Ollama on your machine.
+2. Run a model, for example: `ollama run ministral-3:14b`
+3. The default endpoint is `http://localhost:11434/v1`.
+4. You can pass this via CLI using `--base-url http://localhost:11434/v1` or update your `.env` file.
+
+List available models on your active server:
 
 ```bash
 python -m explainable_agent.cli --list-models
 ```
 
-Run the agent:
+Run the agent (LM Studio example):
 
 ```bash
 python -m explainable_agent.cli --model gpt-oss-20b --reasoning-effort high --task "calculate_math: (215*4)-12"
+```
+
+Run the agent (Ollama example):
+
+```bash
+python -m explainable_agent.cli --base-url http://localhost:11434/v1 --model ministral-3:14b --reasoning-effort high --task "calculate_math: (215*4)-12"
 ```
 
 Run with visual trace in terminal:
