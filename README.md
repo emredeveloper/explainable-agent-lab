@@ -15,16 +15,12 @@ Building reliable agents is hard. LLMs hallucinate, get stuck in infinite loops,
 ## 🚀 Quick Start
 
 ### 1. Install
+Install directly from PyPI:
 ```bash
-# Recommended: Editable install
-python -m venv .venv
-# On Windows:
-.venv\Scripts\activate
-# On Mac/Linux:
-# source .venv/bin/activate
-
-pip install -e .[dev]
+pip install explainable-agent
 ```
+
+*(Optional: for development, clone the repo and run `pip install -e .[dev]`)*
 
 ### 2. Connect Your Local LLM
 You can use any OpenAI-compatible local server like **Ollama** or **LM Studio**.
@@ -32,12 +28,14 @@ You can use any OpenAI-compatible local server like **Ollama** or **LM Studio**.
 - **Ollama:** `http://localhost:11434/v1` (e.g., model: `ministral-3:14b`)
 - **LM Studio:** `http://localhost:1234/v1` (e.g., model: `gpt-oss-20b`)
 
-*Tip: Copy `.env.example` to `.env` to set your defaults.*
+*Tip: You can create a `.env` file in your working directory to set your defaults (see `.env.example`).*
 
 ### 3. Run the Agent
+The package installs a global CLI command `explainable-agent`.
+
 **Example using Ollama:**
 ```bash
-python -m explainable_agent.cli \
+explainable-agent \
   --base-url http://localhost:11434/v1 \
   --model ministral-3:14b \
   --task "calculate_math: (215*4)-12" \
