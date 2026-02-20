@@ -1,18 +1,19 @@
 # Explainable Agent Lab
 
-Local-first, explainable agent framework for OpenAI-compatible models.
+Local-first, explainable agent framework designed to guide developers building AI agents.
 
-This repository is built for two things:
-1. Running a tool-using agent with transparent step-by-step traces.
-2. Evaluating tool-calling quality on benchmark-style datasets.
+The core mission of this project is **explainability and guidance**. Building reliable agents is hard; LLMs hallucinate, get stuck in infinite loops, or fail to parse tools correctly. This repository is built to:
+1. **Show the hidden errors:** Reveal exactly where and why an agent fails (e.g., low confidence, schema violations, logic loops).
+2. **Guide the builder:** Provide actionable diagnostics, error analysis, and improvement suggestions for your prompts and tools.
+3. **Evaluate and iterate:** Run tool-using agents with transparent step-by-step traces and benchmark their performance on custom datasets.
 
 ## What You Get
 
 - Structured agent decisions per step:
   - `action`, `confidence`, `rationale`, `evidence`, `error_analysis`, `proposed_fix`
-- **Self-Healing (Kendi Kendini Düzeltme):** Hata anında ajanın hatayı analiz edip alternatif çözüm (tool) üretebilme yeteneği.
-- **Terminalde Görsel İzleme (Verbose Modu):** Zengin (rich) kütüphanesi ile terminalde renkli, etkileşimli adım adım izleme imkanı.
-- **Detaylı İyileştirme Raporları (Diagnostics):** Her çalışma sonunda ajan performansı, hata oranları ve sonsuz döngü (loop) riskleri hakkında somut öneriler sunan raporlar.
+- **Self-Healing:** The agent's ability to automatically analyze its own errors upon failure and propose alternative solutions.
+- **Visual Terminal Tracking (Verbose Mode):** Step-by-step interactive and colorful tracking in the terminal using the `rich` library.
+- **Detailed Diagnostic Reports:** Concrete suggestions at the end of each run regarding agent performance, error rates, hallucination, and infinite loop risks.
 - Tool execution traces with audit metadata
 - Faithfulness signals:
   - alternative answer similarity
