@@ -5,29 +5,33 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "explainable-agent"
 version = "0.1.0"
-description = "Local, explainable, tool-using agent framework for OpenAI-compatible models."
+description = "A local-first, explainable AI agent framework with self-healing, detailed error diagnostics, and interactive tool-calling traces."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [
   { name = "Emre" }
 ]
-keywords = ["agent", "llm", "tool-calling", "evaluation", "xai"]
+keywords = ["agent", "llm", "tool-calling", "evaluation", "xai", "self-healing"]
 dependencies = [
   "openai>=1.54.0",
   "json-repair>=0.30.3",
   "tenacity>=8.2.3",
-  "pydantic>=2.9.0"
+  "pydantic>=2.9.0",
+  "ddgs>=0.1.0",
+  "rich>=13.0.0"
 ]
 
 [project.optional-dependencies]
 dev = [
-  "pytest>=8.3.0"
+  "pytest>=8.3.0",
+  "twine>=5.1.1",
+  "build>=1.2.1"
 ]
 
 [project.urls]
-Repository = "https://github.com/your-username/explainable-agent"
-Issues = "https://github.com/your-username/explainable-agent/issues"
+Repository = "https://github.com/emredeveloper/explainable-agent-lab"
+Issues = "https://github.com/emredeveloper/explainable-agent-lab/issues"
 
 [project.scripts]
 explainable-agent = "explainable_agent.cli:main"
