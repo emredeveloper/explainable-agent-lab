@@ -152,6 +152,28 @@ python scripts/eval_hf_tool_calls.py --dataset examples/custom_eval_sample.jsonl
 
 After the run, you will get a detailed Markdown report containing Error Breakdowns, Argument Match Rates, Failure Patterns, and an Actionable Plan.
 
+## Using the Python API
+
+You can easily integrate the Explainable Agent into your own Python codebase. We provide ready-to-run examples in the `examples/` directory.
+
+### Basic Usage
+
+You can initialize the agent, run tasks, and save diagnostic reports programmatically:
+
+```bash
+python examples/basic_usage.py
+```
+
+### Adding Custom Tools
+
+The framework is highly extensible. You can register your own Python functions as agent tools using the `@define_tool` decorator. The agent will automatically discover them, understand their usage rules, and recover from any custom exceptions you raise.
+
+See how to create a custom tool and run it:
+
+```bash
+python examples/custom_tool_usage.py
+```
+
 ### Standard Benchmark Examples
 
 Note on output length:
