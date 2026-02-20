@@ -108,6 +108,52 @@ python -m explainable_agent.cli --sqlite-db data/demo.db --task "sqlite_query: S
 
 ## Evaluation
 
+You can easily evaluate your own custom datasets, HuggingFace datasets, or fine-tuned models. The evaluation pipeline automatically parses messy model outputs, attempts to repair broken JSON, and compares the predicted tool calls against your expected ones.
+
+### Evaluating Custom Datasets
+
+To evaluate a custom dataset or a dataset downloaded from HuggingFace, it simply needs to be in `.jsonl` (JSON Lines) format with the following structure per line:
+
+```json
+{
+  "query": "What is the weather like in Tokyo right now?",
+  "tools": [
+    {
+      "type": "function",
+      "function": {
+        "name": "get_weather",
+        "description": "Fetches the current weather for a specified location.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "location": { "type": "string" }
+          },
+          "required": ["location"]
+        }
+      }
+    }
+  ],
+  "expected_tool_calls": [
+    {
+      "name": "get_weather",
+      "arguments": {
+        "location": "Tokyo"
+      }
+    }
+  ]
+}
+```
+
+We have provided a sample in `examples/custom_eval_sample.jsonl`. You can run the evaluation against it using:
+
+```bash
+python scripts/eval_hf_tool_calls.py --dataset examples/custom_eval_sample.jsonl --model your-model-name
+```
+
+After the run, you will get a detailed Markdown report containing Error Breakdowns, Argument Match Rates, Failure Patterns, and an Actionable Plan.
+
+### Standard Benchmark Examples
+
 Note on output length:
 - `--max-completion-tokens` is optional.
 - If omitted (or set to `0`), evaluators do not send `max_tokens`; generation ends naturally when the model finishes.
