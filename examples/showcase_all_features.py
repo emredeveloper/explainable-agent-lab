@@ -60,7 +60,8 @@ def run_evaluation_scenario():
     cmd = [
         sys.executable, str(eval_script),
         "--dataset", str(dataset_path),
-        "--model", "ministral-3:14b" # Adjust this if using LM Studio (e.g. gpt-oss-20b)
+        "--base-url", "http://localhost:1234/v1",
+        "--model", "qwen/qwen3-vl-4b" # Adjust this if using LM Studio (e.g. gpt-oss-20b)
     ]
     
     try:
@@ -82,8 +83,8 @@ def main():
     print("🚀 EXPLAINABLE AGENT LAB - FULL FEATURE SHOWCASE 🚀\n")
 
     settings = Settings.from_env().with_overrides(
-        base_url="http://localhost:11434/v1", # Change to 1234 for LM Studio
-        requested_model="ministral-3:14b",
+        base_url="http://localhost:1234/v1", # Changed to 1234 for LM Studio
+        requested_model="qwen/qwen3-vl-4b",
         reasoning_effort="high",
         max_steps=5
     )

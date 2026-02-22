@@ -131,6 +131,12 @@ def parse_args() -> argparse.Namespace:
         help="Model name (default: AGENT_MODEL or gpt-oss-20b).",
     )
     parser.add_argument(
+        "--base-url",
+        type=str,
+        default=None,
+        help="Base URL for the OpenAI compatible endpoint.",
+    )
+    parser.add_argument(
         "--reasoning-effort",
         type=str,
         choices=["low", "medium", "high"],
@@ -972,6 +978,8 @@ def _build_messages(sample: dict[str, Any], reasoning_effort: str, language: str
 def main() -> int:
     args = parse_args()
     settings = Settings.from_env()
+    if args.base_url:
+        settings = settings.with_overrides(base_url=args.base_url)
     requested_model = args.model or settings.requested_model
     reasoning_effort = args.reasoning_effort or settings.reasoning_effort
     dataset_path = Path(args.dataset)
