@@ -9,6 +9,8 @@ Building reliable agents is hard. LLMs hallucinate, get stuck in infinite loops,
 - **Self-Healing:** The agent automatically analyzes its own errors and proposes alternative tool-based solutions.
 - **Visual Terminal Tracking:** Step-by-step interactive and colorful tracking using the `rich` library (`--verbose`).
 - **Detailed Diagnostic Reports:** Actionable suggestions on hallucination risks, loop patterns, and prompt improvements.
+- **Chaos Engineering (Stress Testing):** Inject simulated tool errors (e.g., timeouts, missing data) to test your agent's self-healing capabilities.
+- **Efficiency Diagnostics:** Track token usage and step counts to identify context window exhaustion and prompt inefficiencies.
 
 ---
 
@@ -49,12 +51,13 @@ explainable-agent \
 Easily integrate the agent into your codebase or create custom tools using the `@define_tool` decorator. 
 
 Check out the `examples/` directory:
+- [`examples/showcase_all_features.py`](examples/showcase_all_features.py) - A comprehensive test script demonstrating Built-in Tools, Custom Tools, Self-Healing, Chaos Mode, and Evaluation.
 - [`examples/basic_usage.py`](examples/basic_usage.py) - Initialize and run the agent programmatically.
 - [`examples/custom_tool_usage.py`](examples/custom_tool_usage.py) - Learn how to build custom tools and watch the agent self-heal from errors.
 
-Run an example:
+Run the showcase:
 ```bash
-python examples/custom_tool_usage.py
+python examples/showcase_all_features.py
 ```
 
 ---
@@ -84,4 +87,4 @@ The agent comes with out-of-the-box tools ready to use:
 `duckduckgo_search`, `calculate_math`, `read_text_file`, `list_workspace_files`, `now_utc`, `sqlite_init_demo`, `sqlite_list_tables`, `sqlite_describe_table`, `sqlite_query`, `sqlite_execute`.
 
 ---
-*License: MIT | Current Release: v0.1.0*
+*License: MIT | Current Release: v0.1.2*

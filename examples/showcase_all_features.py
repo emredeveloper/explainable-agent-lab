@@ -55,15 +55,15 @@ def run_evaluation_scenario():
     eval_script = Path("scripts/eval_hf_tool_calls.py").resolve()
     dataset_path = Path("examples/custom_eval_sample.jsonl").resolve()
     
-    # We will use the CLI to run the evaluation script directly
+    import sys
+    # We use sys.executable to ensure we run the evaluation with the same Python environment
     cmd = [
-        "python", str(eval_script),
+        sys.executable, str(eval_script),
         "--dataset", str(dataset_path),
         "--model", "ministral-3:14b" # Adjust this if using LM Studio (e.g. gpt-oss-20b)
     ]
     
     try:
-        # Note: We use shell=True on Windows for simplicity, but list format is safer.
         result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8")
         print("--- Evaluation Output ---")
         # Just print the last 20 lines to show the scores
