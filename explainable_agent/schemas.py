@@ -31,6 +31,8 @@ class StepTrace:
     decision: Decision
     tool_output: str | None
     latency_ms: int
+    model_output_length: int = 0
+    tool_output_length: int = 0
     audit: dict[str, Any] = field(default_factory=dict)
     timestamp_utc: str = field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
@@ -43,6 +45,8 @@ class StepTrace:
             "decision": self.decision.to_dict(),
             "tool_output": self.tool_output,
             "latency_ms": self.latency_ms,
+            "model_output_length": self.model_output_length,
+            "tool_output_length": self.tool_output_length,
             "audit": dict(self.audit),
             "timestamp_utc": self.timestamp_utc,
         }
@@ -75,6 +79,7 @@ class RunTrace:
     final_answer: str
     faithfulness: FaithfulnessCheck
     errors: list[str] = field(default_factory=list)
+    efficiency_diagnostics: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -88,4 +93,5 @@ class RunTrace:
             "final_answer": self.final_answer,
             "faithfulness": self.faithfulness.to_dict(),
             "errors": list(self.errors),
+            "efficiency_diagnostics": list(self.efficiency_diagnostics),
         }

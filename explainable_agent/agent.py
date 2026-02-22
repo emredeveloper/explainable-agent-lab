@@ -294,6 +294,19 @@ def _build_step_audit(
     }
 
 
+def _analyze_efficiency(steps: list[StepTrace]) -> list[str]:
+    diagnostics: list[str] = []
+    
+    if len(steps) >= 5:
+        diagnostics.append(f"Analysis: It took the agent {len(steps)} steps to reach a conclusion. Complex multi-step paths increase the risk of hallucination. Consider breaking down the task or creating higher-level tools.")
+        
+    for step in steps:
+        if step.tool_output_length > 4000:
+            diagnostics.append(f"Warning: The output from '{step.decision.tool_name}' at Step {step.step} was extremely long ({step.tool_output_length} characters). This may overwhelm the model's context window and degrade performance. Consider adding a tool that filters or summarizes this data.")
+            
+    return diagnostics
+
+
 class ExplainableAgent:
     def __init__(self, settings: Settings, client: OpenAICompatClient | None = None, verbose: bool = False) -> None:
         self.settings = settings
@@ -408,6 +421,8 @@ class ExplainableAgent:
                     ),
                     tool_output=tool_output,
                     latency_ms=0,
+                    model_output_length=len("[deterministic_tool_call]"),
+                    tool_output_length=len(tool_output or ""),
                     audit={
                         "source": "explicit_request",
                         "why_tool": "Tool name explicitly mentioned in user text.",
@@ -505,6 +520,8 @@ class ExplainableAgent:
                         decision=decision,
                         tool_output=tool_output,
                         latency_ms=latency_ms,
+                        model_output_length=len(raw_output or ""),
+                        tool_output_length=len(tool_output or ""),
                         audit=_build_step_audit(
                             decision=decision,
                             source=decision_source,
@@ -542,6 +559,8 @@ class ExplainableAgent:
                     decision=decision,
                     tool_output=None,
                     latency_ms=latency_ms,
+                    model_output_length=len(raw_output or ""),
+                    tool_output_length=0,
                     audit=_build_step_audit(
                         decision=decision,
                         source=decision_source,
@@ -632,6 +651,8 @@ class ExplainableAgent:
             tool_support_score=support_score,
             support_threshold=support_threshold,
         )
+        
+        diagnostics = _analyze_efficiency(steps)
 
         return RunTrace(
             run_id=run_id,
@@ -644,4 +665,5 @@ class ExplainableAgent:
             final_answer=final_answer,
             faithfulness=faithfulness,
             errors=errors,
+            efficiency_diagnostics=diagnostics,
         )

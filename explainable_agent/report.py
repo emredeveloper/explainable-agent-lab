@@ -50,6 +50,8 @@ def _to_compact_trace(trace: RunTrace) -> dict[str, object]:
                 "confidence": round(step.decision.confidence, 3),
                 "rationale": _compact(step.decision.rationale, 180),
                 "latency_ms": step.latency_ms,
+                "model_output_length": step.model_output_length,
+                "tool_output_length": step.tool_output_length,
             }
         )
     return {
@@ -74,6 +76,7 @@ def _to_compact_trace(trace: RunTrace) -> dict[str, object]:
         },
         "steps": steps,
         "errors": list(trace.errors),
+        "efficiency_diagnostics": list(trace.efficiency_diagnostics),
     }
 
 
@@ -135,6 +138,8 @@ def _to_markdown_report(trace: RunTrace) -> str:
         if step.tool_output is not None:
             lines.append(f"- Tool output: `{_compact(step.tool_output)}`")
         lines.append(f"- Latency: `{step.latency_ms} ms`")
+        lines.append(f"- Model output length: `{step.model_output_length} chars`")
+        lines.append(f"- Tool output length: `{step.tool_output_length} chars`")
         lines.append("")
     if trace.errors:
         lines.append("## Errors")
@@ -185,6 +190,10 @@ def _generate_diagnostics(trace: RunTrace) -> list[str]:
     if trace.faithfulness.tool_support_score > 0 and not trace.faithfulness.likely_faithful:
         suggestions.append("FAITHFULNESS WARNING: Agent used the tool successfully but the final answer does not sufficiently overlap with the tool output (Hallucination risk). Add the rule 'Only use the data coming from the tool, do not add your own interpretation' to the prompt.")
         
+    # 5. Efficiency Diagnostics
+    if hasattr(trace, 'efficiency_diagnostics') and trace.efficiency_diagnostics:
+        suggestions.extend(trace.efficiency_diagnostics)
+
     return suggestions
 
 
