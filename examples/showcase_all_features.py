@@ -104,7 +104,15 @@ def main():
     )
     run_agent_scenario("Custom Tool & Self-Healing", task2, settings, client)
 
-    # SCENARIO 3: JSONL Evaluation Pipeline
+    # SCENARIO 3: Chaos Engineering (Stress Testing)
+    task3 = (
+        "Calculate (512 * 4) + 128 using the calculate_math tool."
+    )
+    chaos_settings = settings.with_overrides(chaos_mode=True)
+    chaos_client = OpenAICompatClient(base_url=chaos_settings.base_url, api_key=chaos_settings.api_key)
+    run_agent_scenario("Chaos Engineering Mode (20% Random Error Injection)", task3, chaos_settings, chaos_client)
+
+    # SCENARIO 4: JSONL Evaluation Pipeline
     run_evaluation_scenario()
 
 if __name__ == "__main__":

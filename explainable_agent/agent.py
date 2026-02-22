@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import random
 from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
@@ -301,6 +302,22 @@ class ExplainableAgent:
         )
         self.verbose = verbose
 
+    def _execute_tool(self, tool_name: str, tool_input: str) -> str:
+        if self.settings.chaos_mode and random.random() < 0.2:
+            chaos_errors = [
+                "ERROR: [Chaos Mode] TIMEOUT: The external service did not respond in time.",
+                "ERROR: [Chaos Mode] MALFORMED_DATA: Received unreadable garbage instead of JSON.",
+                "ERROR: [Chaos Mode] PERMISSION_DENIED: Agent lacks the required role to run this tool.",
+                "ERROR: [Chaos Mode] RATE_LIMIT: Too many requests, please retry later or use another tool."
+            ]
+            return random.choice(chaos_errors)
+
+        return run_tool(
+            tool_name=tool_name,
+            tool_input=tool_input,
+            workspace_root=self.settings.workspace_root,
+        )
+
     def _print_step(self, step_num: int, decision: Decision, tool_output: str | None = None):
         if not self.verbose:
             return
@@ -370,10 +387,9 @@ class ExplainableAgent:
         loop_start = 1
         if explicit_tool_request:
             tool_name, tool_input = explicit_tool_request
-            tool_output = run_tool(
+            tool_output = self._execute_tool(
                 tool_name=tool_name,
                 tool_input=tool_input,
-                workspace_root=self.settings.workspace_root,
             )
             steps.append(
                 StepTrace(
@@ -478,10 +494,9 @@ class ExplainableAgent:
                 )
 
             if decision.action == "tool_call":
-                tool_output = run_tool(
+                tool_output = self._execute_tool(
                     tool_name=decision.tool_name or "",
                     tool_input=decision.tool_input or "",
-                    workspace_root=self.settings.workspace_root,
                 )
                 steps.append(
                     StepTrace(

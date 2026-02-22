@@ -75,6 +75,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Print steps to terminal with colors.",
     )
+    parser.add_argument(
+        "--chaos",
+        action="store_true",
+        help="Enable Chaos Mode to simulate random tool errors for testing self-healing.",
+    )
     return parser
 
 
@@ -99,6 +104,8 @@ def main() -> int:
         settings = settings.with_overrides(workspace_root=Path(args.workspace).resolve())
     if args.runs_dir:
         settings = settings.with_overrides(runs_dir=Path(args.runs_dir).resolve())
+    if args.chaos:
+        settings = settings.with_overrides(chaos_mode=True)
 
     client = OpenAICompatClient(base_url=settings.base_url, api_key=settings.api_key)
 

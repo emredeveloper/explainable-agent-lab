@@ -16,6 +16,7 @@ class Settings:
     runs_dir: Path
     workspace_root: Path
     temperature: float
+    chaos_mode: bool
 
     def with_overrides(
         self,
@@ -28,6 +29,7 @@ class Settings:
         runs_dir: Path | None = None,
         workspace_root: Path | None = None,
         temperature: float | None = None,
+        chaos_mode: bool | None = None,
     ) -> "Settings":
         return replace(
             self,
@@ -49,6 +51,7 @@ class Settings:
                 workspace_root if workspace_root is not None else self.workspace_root
             ),
             temperature=temperature if temperature is not None else self.temperature,
+            chaos_mode=chaos_mode if chaos_mode is not None else self.chaos_mode,
         )
 
     @classmethod
@@ -71,4 +74,5 @@ class Settings:
             runs_dir=Path(os.getenv("AGENT_RUNS_DIR", "runs")).resolve(),
             workspace_root=Path(os.getenv("AGENT_WORKSPACE", ".")).resolve(),
             temperature=float(os.getenv("AGENT_TEMPERATURE", "0.2")),
+            chaos_mode=os.getenv("AGENT_CHAOS_MODE", "false").lower() == "true",
         )
