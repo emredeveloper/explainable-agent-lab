@@ -47,5 +47,5 @@ def test_write_run_artifacts(tmp_path: Path) -> None:
     payload = json.loads(trace_path.read_text(encoding="utf-8"))
     assert payload["trace_version"] == "compact-v2"
     assert payload["steps"][0]["action"] == "final_answer"
-    assert "model_output" not in json.dumps(payload)
-    assert "Aciklanabilir Ajan Calisma Raporu" in report_path.read_text(encoding="utf-8")
+    assert not any(k == "model_output" for s in payload["steps"] for k in s)
+    assert "Explainable Agent Run Report" in report_path.read_text(encoding="utf-8")

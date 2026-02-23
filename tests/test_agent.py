@@ -97,7 +97,7 @@ def test_fallback_answer_from_tool_outputs_db() -> None:
     ]
     fallback = _fallback_answer_from_tool_outputs(steps)
     assert fallback is not None
-    assert "SQLite sonucu" in fallback
+    assert "SQLite result" in fallback
 
 
 def test_tool_support_score() -> None:
@@ -131,4 +131,4 @@ def test_build_step_audit_warnings() -> None:
     )
     audit = _build_step_audit(decision=decision, source="model")
     assert audit["source"] == "model"
-    assert any("Dusuk confidence" in warning for warning in audit["warnings"])
+    assert any("Low confidence" in warning for warning in audit["warnings"])

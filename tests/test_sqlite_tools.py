@@ -20,7 +20,7 @@ def test_sqlite_demo_lifecycle(tmp_path: Path, monkeypatch) -> None:
     assert "orders" in tables
 
     describe = sqlite_describe_table("customers", tmp_path)
-    assert "KOLONLAR:" in describe
+    assert "COLUMNS:" in describe
     assert "name" in describe
 
     query_out = sqlite_query(
@@ -28,7 +28,7 @@ def test_sqlite_demo_lifecycle(tmp_path: Path, monkeypatch) -> None:
         tmp_path,
     )
     assert "Acme Corp" in query_out
-    assert "SATIR_SAYISI:" in query_out
+    assert "ROW_COUNT:" in query_out
 
     execute_out = sqlite_execute(
         "INSERT INTO customers (id, name, city) VALUES (10, 'Delta', 'Bursa');",
