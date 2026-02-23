@@ -428,11 +428,14 @@ def duckduckgo_search(query: str, _: Path) -> str:
     if not query:
         return "ERROR: Search query is empty."
     try:
-        from duckduckgo_search import DDGS
+        try:
+            from ddgs import DDGS
+        except ImportError:
+            from duckduckgo_search import DDGS
         ddgs = DDGS()
         results = list(ddgs.text(query, max_results=5))
     except ImportError:
-        return "ERROR: duckduckgo-search package is not installed."
+        return "ERROR: ddgs or duckduckgo-search package is not installed. Run: pip install ddgs"
     except Exception as exc:
         return f"ERROR: Search failed: {exc}"
 

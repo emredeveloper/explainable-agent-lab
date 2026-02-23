@@ -11,6 +11,7 @@ Building reliable agents is hard. LLMs hallucinate, get stuck in infinite loops,
 - **Detailed Diagnostic Reports:** Actionable suggestions on hallucination risks, loop patterns, and prompt improvements.
 - **Chaos Engineering (Stress Testing):** Inject simulated tool errors (e.g., timeouts, missing data) to test your agent's self-healing capabilities.
 - **Efficiency Diagnostics:** Track token usage and step counts to identify context window exhaustion and prompt inefficiencies.
+- **Multi-Agent Orchestration (Team of Thoughts):** Coordinate multiple specialized agents with transparent delegation plans, sub-agent traces, and orchestration diagnostics.
 
 ---
 
@@ -54,6 +55,7 @@ Check out the `examples/` directory:
 - [`examples/showcase_all_features.py`](examples/showcase_all_features.py) - A comprehensive test script demonstrating Built-in Tools, Custom Tools, Self-Healing, Chaos Mode, and Evaluation.
 - [`examples/basic_usage.py`](examples/basic_usage.py) - Initialize and run the agent programmatically.
 - [`examples/custom_tool_usage.py`](examples/custom_tool_usage.py) - Learn how to build custom tools and watch the agent self-heal from errors.
+- [`examples/multi_agent_demo.py`](examples/multi_agent_demo.py) - Multi-agent orchestration: researcher + db_expert working together.
 
 Run the showcase:
 ```bash
@@ -87,4 +89,4 @@ The agent comes with out-of-the-box tools ready to use:
 `duckduckgo_search`, `calculate_math`, `read_text_file`, `list_workspace_files`, `now_utc`, `sqlite_init_demo`, `sqlite_list_tables`, `sqlite_describe_table`, `sqlite_query`, `sqlite_execute`.
 
 ---
-*License: MIT | Current Release: v0.1.2*
+*License: MIT | Current Release: v0.1.3*

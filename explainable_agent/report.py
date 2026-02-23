@@ -43,11 +43,37 @@ def write_orchestrator_artifacts(trace: OrchestratorRunTrace, runs_dir: Path) ->
         lines.append(f"- **Orchestrator Rationale:** {st.orchestrator_rationale}")
         lines.append(f"- **Sub-Agent Final Answer:** {st.trace.final_answer}")
         
+        # Extract SQL statements and outputs for sqlite tools
+        sql_steps = [
+            (s.step, s.decision.tool_name, s.decision.tool_input or "", s.tool_output or "")
+            for s in st.trace.steps
+            if s.decision.tool_name and s.decision.tool_name.startswith("sqlite_")
+        ]
+        if sql_steps:
+            lines.append("- **SQL Executed:**")
+            for step_num, tool_name, tool_input, tool_output in sql_steps:
+                lines.append(f"  - Step {step_num} (`{tool_name}`):")
+                if tool_input.strip():
+                    lines.append(f"    ```sql")
+                    for ln in tool_input.strip().split("\n"):
+                        lines.append(f"    {ln}")
+                    lines.append(f"    ```")
+                lines.append(f"    Result: `{tool_output[:200]}{'...' if len(tool_output) > 200 else ''}`")
+        
         # Count steps and errors
         step_count = len(st.trace.steps)
         error_count = len([s for s in st.trace.steps if s.decision.error_analysis])
         lines.append(f"- **Sub-Agent Stats:** {step_count} steps taken, {error_count} self-healing events.")
         lines.append("")
+    
+    lines.append("## How to View SQL Results")
+    lines.append("")
+    lines.append("To query the database and see the inserted data, run:")
+    lines.append("```bash")
+    lines.append('explainable-agent --task "sqlite_query: SELECT * FROM ai_news" --verbose')
+    lines.append("```")
+    lines.append("(Or use `sqlite_query: SELECT * FROM customers` for the demo tables.)")
+    lines.append("")
         
     lines.append("## Orchestrator Diagnostics & Improvement Suggestions")
     lines.append("")

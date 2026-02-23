@@ -1,5 +1,9 @@
 import os
+import warnings
 from pathlib import Path
+
+# Suppress ResourceWarnings from sqlite3/httpx in multi-agent runs (harmless, noisy)
+warnings.filterwarnings("ignore", category=ResourceWarning)
 from explainable_agent.config import Settings
 from explainable_agent.openai_client import OpenAICompatClient
 from explainable_agent.agent import ExplainableAgent
