@@ -4,7 +4,62 @@ from datetime import datetime
 import json
 from pathlib import Path
 
-from .schemas import RunTrace
+from .schemas import RunTrace, OrchestratorRunTrace
+
+
+def write_orchestrator_artifacts(trace: OrchestratorRunTrace, runs_dir: Path) -> tuple[Path, Path]:
+    run_dir = runs_dir / trace.run_id
+    run_dir.mkdir(parents=True, exist_ok=True)
+
+    trace_path = run_dir / "orch_trace.json"
+    report_path = run_dir / "orch_report.md"
+
+    trace_path.write_text(
+        json.dumps(trace.to_dict(), indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    
+    lines = []
+    lines.append("# Explainable Multi-Agent Orchestration Report")
+    lines.append("")
+    lines.append(f"- Run ID: `{trace.run_id}`")
+    lines.append(f"- Started at: `{trace.started_at_utc}`")
+    lines.append(f"- Finished at: `{trace.finished_at_utc}`")
+    lines.append("")
+    lines.append("## Main Task")
+    lines.append("")
+    lines.append(trace.main_task)
+    lines.append("")
+    lines.append("## Final Synthesis")
+    lines.append("")
+    lines.append(trace.final_synthesis or "(empty)")
+    lines.append("")
+    
+    lines.append("## Delegation Plan & Sub-Agent Traces")
+    lines.append("")
+    for i, st in enumerate(trace.subtasks):
+        lines.append(f"### Subtask {i+1}: Assigned to `{st.agent_name}`")
+        lines.append(f"- **Assigned Task:** {st.assigned_task}")
+        lines.append(f"- **Orchestrator Rationale:** {st.orchestrator_rationale}")
+        lines.append(f"- **Sub-Agent Final Answer:** {st.trace.final_answer}")
+        
+        # Count steps and errors
+        step_count = len(st.trace.steps)
+        error_count = len([s for s in st.trace.steps if s.decision.error_analysis])
+        lines.append(f"- **Sub-Agent Stats:** {step_count} steps taken, {error_count} self-healing events.")
+        lines.append("")
+        
+    lines.append("## Orchestrator Diagnostics & Improvement Suggestions")
+    lines.append("")
+    if not trace.diagnostics:
+        lines.append("- Orchestration completed smoothly without warnings.")
+    else:
+        for diag in trace.diagnostics:
+            lines.append(f"- {diag}")
+    lines.append("")
+    
+    report_path.write_text("\n".join(lines), encoding="utf-8")
+    return trace_path, report_path
 
 
 def write_run_artifacts(trace: RunTrace, runs_dir: Path) -> tuple[Path, Path]:

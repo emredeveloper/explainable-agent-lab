@@ -95,3 +95,39 @@ class RunTrace:
             "errors": list(self.errors),
             "efficiency_diagnostics": list(self.efficiency_diagnostics),
         }
+
+@dataclass
+class SubTaskTrace:
+    agent_name: str
+    assigned_task: str
+    orchestrator_rationale: str
+    trace: RunTrace
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "agent_name": self.agent_name,
+            "assigned_task": self.assigned_task,
+            "orchestrator_rationale": self.orchestrator_rationale,
+            "trace": self.trace.to_dict()
+        }
+
+@dataclass
+class OrchestratorRunTrace:
+    run_id: str
+    main_task: str
+    started_at_utc: str
+    finished_at_utc: str
+    subtasks: list[SubTaskTrace]
+    final_synthesis: str
+    diagnostics: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "run_id": self.run_id,
+            "main_task": self.main_task,
+            "started_at_utc": self.started_at_utc,
+            "finished_at_utc": self.finished_at_utc,
+            "subtasks": [st.to_dict() for st in self.subtasks],
+            "final_synthesis": self.final_synthesis,
+            "diagnostics": list(self.diagnostics)
+        }
