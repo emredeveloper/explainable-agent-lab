@@ -331,20 +331,77 @@ class ExplainableAgent:
             workspace_root=self.settings.workspace_root,
         )
 
-    def _print_step(self, step_num: int, decision: Decision, tool_output: str | None = None):
+    def _print_developer_roadmap(
+        self,
+        task: str,
+        resolved_model: str,
+    ) -> None:
+        """Print developer-oriented flow roadmap when verbose=True."""
+        tools_list = ", ".join(available_tool_names())
+        flow = (
+            "Task -> [LLM Decision JSON] -> tool_call? -> execute tool -> append to context -> repeat\n"
+            "                          -> final_answer? -> done (or max_steps)"
+        )
+        content = Text()
+        content.append("Task: ", style="bold")
+        content.append(f"{task[:200]}{'...' if len(task) > 200 else ''}\n")
+        content.append("Model: ", style="bold")
+        content.append(f"{resolved_model}\n")
+        content.append("Config: ", style="bold")
+        content.append(
+            f"max_steps={self.settings.max_steps}, reasoning_effort={self.settings.reasoning_effort}\n"
+        )
+        content.append("Available tools: ", style="bold")
+        content.append(f"{tools_list}\n")
+        content.append("Flow: ", style="bold")
+        content.append(flow)
+        console.print(
+            Panel(
+                content,
+                title="[bold cyan]Agent tools flow roadmap[/]",
+                border_style="cyan",
+                expand=False,
+            )
+        )
+
+    def _print_step(
+        self,
+        step_num: int,
+        decision: Decision,
+        tool_output: str | None = None,
+        *,
+        latency_ms: int | None = None,
+        audit: dict[str, Any] | None = None,
+    ) -> None:
         if not self.verbose:
             return
-            
+
         action_color = "bold blue" if decision.action == "tool_call" else "bold green"
-        
+
         content = Text()
+        # Developer: decision source and latency
+        if audit is not None:
+            source = audit.get("source", "model")
+            content.append(f"Source: ", style="bold dim")
+            content.append(f"{source}", style="dim")
+            if latency_ms is not None:
+                content.append(f"  |  Latency: ", style="bold dim")
+                content.append(f"{latency_ms} ms\n", style="dim")
+            else:
+                content.append("\n")
+            if audit.get("notes"):
+                for note in audit["notes"]:
+                    content.append(f"  Note: {note}\n", style="dim italic")
+        elif latency_ms is not None:
+            content.append(f"Latency: {latency_ms} ms\n", style="dim")
+
         content.append(f"Rationale: ", style="bold")
         content.append(f"{decision.rationale}\n")
-        
+
         conf_color = "red" if decision.confidence < 0.5 else "yellow" if decision.confidence < 0.8 else "green"
         content.append(f"Confidence: ", style="bold")
         content.append(f"{decision.confidence:.2f}\n", style=conf_color)
-        
+
         if decision.action == "tool_call":
             content.append(f"Tool: ", style="bold")
             content.append(f"{decision.tool_name}\n", style="magenta")
@@ -357,7 +414,7 @@ class ExplainableAgent:
         else:
             content.append(f"Final Answer: ", style="bold")
             content.append(f"{decision.answer}\n", style="bold white")
-            
+
         if decision.error_analysis:
             content.append(f"\nError Analysis: ", style="bold red")
             content.append(f"{decision.error_analysis}\n")
@@ -369,9 +426,69 @@ class ExplainableAgent:
             content,
             title=f"Step {step_num} | Action: {decision.action}",
             border_style=action_color,
-            expand=False
+            expand=False,
         )
         console.print(panel)
+
+    def _print_run_summary(self, trace: RunTrace) -> None:
+        """Print run summary: developer recap (verbose) or short summary (!verbose)."""
+        steps = trace.steps
+        n = len(steps)
+        self_healed = sum(
+            1 for s in steps
+            if s.decision.error_analysis and s.decision.action == "tool_call"
+        )
+
+        if self.verbose:
+            # Developer summary: flow recap, diagnostics, faithfulness
+            content = Text()
+            content.append("Flow recap: ", style="bold")
+            parts = []
+            for s in steps:
+                if s.decision.action == "tool_call":
+                    err = "ERROR:" in (s.tool_output or "")
+                    parts.append(f"Step {s.step} {s.decision.tool_name} {'[FAIL]' if err else '[OK]'}")
+                else:
+                    parts.append(f"Step {s.step} final_answer")
+            content.append(" -> ".join(parts) + "\n")
+
+            if trace.errors:
+                content.append("Errors / auto-fixes: ", style="bold yellow")
+                content.append("; ".join(trace.errors) + "\n")
+            if trace.efficiency_diagnostics:
+                content.append("Efficiency: ", style="bold cyan")
+                content.append("; ".join(trace.efficiency_diagnostics) + "\n")
+            content.append("Faithfulness: ", style="bold")
+            content.append(f"{trace.faithfulness.note}\n")
+
+            console.print(
+                Panel(
+                    content,
+                    title="[bold green]Run summary (developer)[/]",
+                    border_style="green",
+                    expand=False,
+                )
+            )
+        else:
+            # Short summary for end-user
+            line_parts = []
+            for s in steps:
+                if s.decision.action == "tool_call":
+                    err = "ERROR:" in (s.tool_output or "")
+                    line_parts.append(f"Step {s.step}: {s.decision.tool_name} {'[FAIL]' if err else '[OK]'}")
+                else:
+                    line_parts.append(f"Step {s.step}: final_answer")
+            one_line = " -> ".join(line_parts)
+
+            console.print(f"Run complete: [bold]{n} steps[/]" + (f" ([yellow]{self_healed} self-healed[/])" if self_healed else "") + ".")
+            console.print(f"Flow: {one_line}")
+            answer_preview = (trace.final_answer or "")[:200]
+            if len(trace.final_answer or "") > 200:
+                answer_preview += "..."
+            console.print(f"Answer: {answer_preview}")
+            if trace.errors or trace.efficiency_diagnostics:
+                warnings = trace.errors + trace.efficiency_diagnostics
+                console.print(f"[yellow]Warnings:[/] {'; '.join(warnings[:3])}" + (" ..." if len(warnings) > 3 else ""))
 
     def run(self, task: str) -> RunTrace:
         run_id = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S") + "_" + uuid4().hex[
@@ -379,6 +496,9 @@ class ExplainableAgent:
         ]
         started_at = _utc_now()
         resolved_model = self.client.resolve_model(self.settings.requested_model)
+
+        if self.verbose:
+            self._print_developer_roadmap(task=task, resolved_model=resolved_model)
 
         messages: list[dict[str, str]] = [
             {
@@ -453,7 +573,13 @@ class ExplainableAgent:
                     "content": explicit_next_prompt,
                 }
             )
-            self._print_step(1, steps[0].decision, tool_output)
+            self._print_step(
+                1,
+                steps[0].decision,
+                tool_output,
+                latency_ms=0,
+                audit=steps[0].audit,
+            )
             loop_start = 2
 
         for step in range(loop_start, self.settings.max_steps + 1):
@@ -535,7 +661,13 @@ class ExplainableAgent:
                         ),
                     )
                 )
-                self._print_step(step, decision, tool_output)
+                self._print_step(
+                    step,
+                    decision,
+                    tool_output,
+                    latency_ms=latency_ms,
+                    audit=steps[-1].audit,
+                )
                 messages.append({"role": "assistant", "content": raw_output})
                 content_text = f"Tool result ('{decision.tool_name}'):\n{tool_output}\n\n"
                 if tool_output and tool_output.startswith("ERROR:"):
@@ -570,7 +702,12 @@ class ExplainableAgent:
                     ),
                 )
             )
-            self._print_step(step, decision)
+            self._print_step(
+                step,
+                decision,
+                latency_ms=latency_ms,
+                audit=steps[-1].audit,
+            )
             break
 
         if not final_answer:
@@ -654,7 +791,7 @@ class ExplainableAgent:
         
         diagnostics = _analyze_efficiency(steps)
 
-        return RunTrace(
+        trace = RunTrace(
             run_id=run_id,
             task=task,
             requested_model=self.settings.requested_model,
@@ -667,3 +804,5 @@ class ExplainableAgent:
             errors=errors,
             efficiency_diagnostics=diagnostics,
         )
+        self._print_run_summary(trace)
+        return trace

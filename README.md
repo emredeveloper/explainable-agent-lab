@@ -68,19 +68,50 @@ python examples/showcase_all_features.py
 
 Evaluate your fine-tuned models or custom datasets easily. The pipeline parses messy outputs, repairs broken JSON, and generates actionable Markdown reports.
 
-**1. Create a `.jsonl` dataset** (See `examples/custom_eval_sample.jsonl`)
+- **Custom JSONL datasets:**  
+  1. Create a `.jsonl` dataset (see `examples/custom_eval_sample.jsonl`).  
+  2. Run the evaluation:
+     ```bash
+     python scripts/eval_hf_tool_calls.py \
+       --dataset examples/custom_eval_sample.jsonl \
+       --model ministral-3:14b
+     ```
 
-**2. Run the evaluation:**
-```bash
-python scripts/eval_hf_tool_calls.py \
-  --dataset examples/custom_eval_sample.jsonl \
-  --model ministral-3:14b
-```
+- **Built-in HF-style tool-calling sample (JSONL):**  
+  A small complex function-calling benchmark is bundled under `data/evals/hf_complexfuncbench_first_turn_100.jsonl`.  
+  Example with LM Studio and `zai-org/glm-4.6v-flash`:
+  ```bash
+  python scripts/eval_hf_tool_calls.py \
+    --dataset data/evals/hf_complexfuncbench_first_turn_100.jsonl \
+    --base-url http://localhost:1234/v1 \
+    --model zai-org/glm-4.6v-flash \
+    --limit 10 \
+    --sampling head
+  ```
 
 We also support standard benchmarks out of the box:
-- **HF Tool Calls:** `data/evals/hf_xlam_fc_sample.jsonl`
+- **HF Tool Calls:** `data/evals/hf_complexfuncbench_first_turn_100.jsonl`
 - **BFCL SQL:** `data/evals/bfcl_sql/BFCL_v3_sql.json`
 - **SWE-bench Lite:** `data/evals/swebench_lite_test.jsonl`
+
+---
+
+## 🔍 Tracing & Verbosity Modes
+
+The agent supports two primary verbosity modes:
+
+- **Verbose mode (`verbose=True` or `--verbose`):**
+  - Prints an **Agent tools flow roadmap** at the start (task, model, config, available tools, and control flow).
+  - Shows rich, per-step panels including:
+    - Decision source (`model`, `explicit_request`, `heuristic_override`)
+    - Latency per step
+    - Rationale, confidence, tool name/input/output
+    - Error analysis and proposed fix (for self-healing steps)
+  - Ends with a **developer run summary** panel (tool flow recap, faithfulness note, efficiency diagnostics).
+
+- **Concise mode (`verbose=False`):**
+  - Prints a one-line **flow summary** (e.g., `Step 1: calculate_math [FAIL] -> Step 2: calculate_math [OK] -> Step 3: final_answer`).
+  - Shows total step count, self-healed error count, a short final answer preview, and key warnings (if any).
 
 ---
 
@@ -89,4 +120,4 @@ The agent comes with out-of-the-box tools ready to use:
 `duckduckgo_search`, `calculate_math`, `read_text_file`, `list_workspace_files`, `now_utc`, `sqlite_init_demo`, `sqlite_list_tables`, `sqlite_describe_table`, `sqlite_query`, `sqlite_execute`.
 
 ---
-*License: MIT | Current Release: v0.1.3*
+*License: MIT | Current Release: v0.1.4*
