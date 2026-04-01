@@ -5,8 +5,7 @@
 - Added OpenAI-native tool calling mode, streaming decision support, and per-step token accounting across traces and reports.
 - Refactored the single-agent runtime to separate message building, decision requests, heuristic correction, step recording, and tool follow-up prompts for easier maintenance.
 - Improved provider compatibility by using safer plain decision calls for Ollama-compatible servers when structured/native modes are likely to be slow or fragile.
-- Added focused unit coverage for config and OpenAI client behavior, including Ollama-specific decision fallback logic.
-- Stabilized local test setup by steering temporary test directories into the workspace on Windows.
+- Updated validation and prepublish flows to rely on lightweight compile checks and runnable scripts.
 - Switched DuckDuckGo dependency from `duckduckgo-search` to `ddgs`.
 
 ## 0.1.4 - 2026-02-24

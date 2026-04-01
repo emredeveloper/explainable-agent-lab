@@ -28,8 +28,8 @@ pip install explainable-agent
 ### 2. Connect Your Local LLM
 You can use any OpenAI-compatible local server like **Ollama** or **LM Studio**.
 
-- **Ollama:** `http://localhost:11434/v1` (e.g., model: `ministral-3:14b`)
-- **LM Studio:** `http://localhost:1234/v1` (e.g., model: `gpt-oss-20b`)
+- **Ollama:** `http://localhost:11434/v1` (e.g., model: `qwen3.5:9b`)
+- **LM Studio:** `http://localhost:1234/v1` (e.g., model: `google/gemma-3-12b`)
 
 *Tip: You can create a `.env` file in your working directory to set your defaults (see `.env.example`).*
 
@@ -40,7 +40,7 @@ The package installs a global CLI command `explainable-agent`.
 ```bash
 explainable-agent \
   --base-url http://localhost:11434/v1 \
-  --model ministral-3:14b \
+  --model qwen3.5:9b \
   --task "calculate_math: (215*4)-12" \
   --verbose
 ```
@@ -49,7 +49,7 @@ explainable-agent \
 
 ## 💻 Using the Python API
 
-Easily integrate the agent into your codebase or create custom tools using the `@define_tool` decorator. 
+Easily integrate the agent into your codebase or create custom tools using the `@define_tool` decorator.
 
 Check out the `examples/` directory:
 - [`examples/showcase_all_features.py`](examples/showcase_all_features.py) - A comprehensive test script demonstrating Built-in Tools, Custom Tools, Self-Healing, Chaos Mode, and Evaluation.
@@ -74,17 +74,17 @@ Evaluate your fine-tuned models or custom datasets easily. The pipeline parses m
      ```bash
      python scripts/eval_hf_tool_calls.py \
        --dataset examples/custom_eval_sample.jsonl \
-       --model ministral-3:14b
+       --model qwen3.5:9b
      ```
 
-- **Built-in HF-style tool-calling sample (JSONL):**  
-  A small complex function-calling benchmark is bundled under `data/evals/hf_complexfuncbench_first_turn_100.jsonl`.  
-  Example with LM Studio and `zai-org/glm-4.6v-flash`:
+- **Built-in HF-style tool-calling sample (JSONL):**
+  A small complex function-calling benchmark is bundled under `data/evals/hf_complexfuncbench_first_turn_100.jsonl`.
+  Example with LM Studio and `google/gemma-3-12b`:
   ```bash
   python scripts/eval_hf_tool_calls.py \
     --dataset data/evals/hf_complexfuncbench_first_turn_100.jsonl \
     --base-url http://localhost:1234/v1 \
-    --model zai-org/glm-4.6v-flash \
+    --model google/gemma-3-12b \
     --limit 10 \
     --sampling head
   ```
@@ -118,6 +118,8 @@ The agent supports two primary verbosity modes:
 ## 🛠️ Built-in Tools
 The agent comes with out-of-the-box tools ready to use:
 `duckduckgo_search`, `calculate_math`, `read_text_file`, `list_workspace_files`, `now_utc`, `sqlite_init_demo`, `sqlite_list_tables`, `sqlite_describe_table`, `sqlite_query`, `sqlite_execute`.
+
+`duckduckgo_search` remains the tool name in the API, while the underlying search dependency is provided by `ddgs`.
 
 ---
 *License: MIT | Current Release: v0.2.0*

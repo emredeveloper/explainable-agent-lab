@@ -8,21 +8,21 @@ python -m venv .venv
 pip install -e .[dev]
 ```
 
-## Run tests
+## Validation
 
 ```bash
-python -m unittest discover
+python -m py_compile explainable_agent\__init__.py explainable_agent\config.py explainable_agent\cli.py explainable_agent\agent.py explainable_agent\tools.py explainable_agent\openai_client.py
 ```
 
-If your Windows temp directory is restricted, run with a local base temp:
+For a broader prepublish pass, run:
 
 ```bash
-python -m unittest discover
+python scripts\prepublish_check.py
 ```
 
 ## Project conventions
 
 - Keep tools deterministic and guarded.
 - Keep traces compact and human-readable.
-- Prefer adding tests for behavior changes.
+- Prefer lightweight validation steps and runnable examples for behavior changes.
 - Use Turkish output in agent responses unless a benchmark requires English prompts.
