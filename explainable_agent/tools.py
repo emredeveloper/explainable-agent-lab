@@ -16,7 +16,6 @@ IGNORED_DIRS = {
     ".venv",
     "venv",
     "__pycache__",
-    ".pytest_cache",
     "runs",
 }
 
@@ -142,14 +141,16 @@ def list_workspace_files(input_path: str, workspace_root: Path) -> str:
     if not path.is_dir():
         return f"ERROR: path is not a directory: {rel}"
 
+    resolved_root = workspace_root.resolve()
     files: list[str] = []
     for candidate in path.rglob(pattern):
         if not candidate.is_file():
             continue
-        rel_parts = candidate.relative_to(workspace_root).parts
+        resolved_candidate = candidate.resolve()
+        rel_parts = resolved_candidate.relative_to(resolved_root).parts
         if any(part in IGNORED_DIRS for part in rel_parts):
             continue
-        files.append(candidate.relative_to(workspace_root).as_posix())
+        files.append(resolved_candidate.relative_to(resolved_root).as_posix())
     files = sorted(files)
     max_items = 100
     if len(files) > max_items:
@@ -456,6 +457,32 @@ def duckduckgo_search(query: str, _: Path) -> str:
 
 
 
+
+
+def openai_tool_definitions() -> list[dict[str, Any]]:
+    """Build OpenAI-compatible tool definitions for native function calling."""
+    defs: list[dict[str, Any]] = []
+    for spec in AVAILABLE_TOOLS.values():
+        params: dict[str, Any] = {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        }
+        if spec.requires_input:
+            params["properties"]["input"] = {
+                "type": "string",
+                "description": spec.usage_hint,
+            }
+            params["required"] = ["input"]
+        defs.append({
+            "type": "function",
+            "function": {
+                "name": spec.name,
+                "description": spec.description,
+                "parameters": params,
+            },
+        })
+    return defs
 
 
 def tool_catalog_text() -> str:

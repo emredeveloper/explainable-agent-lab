@@ -33,6 +33,9 @@ class StepTrace:
     latency_ms: int
     model_output_length: int = 0
     tool_output_length: int = 0
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
     audit: dict[str, Any] = field(default_factory=dict)
     timestamp_utc: str = field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
@@ -47,6 +50,9 @@ class StepTrace:
             "latency_ms": self.latency_ms,
             "model_output_length": self.model_output_length,
             "tool_output_length": self.tool_output_length,
+            "prompt_tokens": self.prompt_tokens,
+            "completion_tokens": self.completion_tokens,
+            "total_tokens": self.total_tokens,
             "audit": dict(self.audit),
             "timestamp_utc": self.timestamp_utc,
         }

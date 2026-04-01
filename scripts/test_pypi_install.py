@@ -38,7 +38,7 @@ def run_test(name: str, base_url: str, model: str, task: str, chaos: bool = Fals
 def main():
     import explainable_agent
     print(f"explainable-agent version: {explainable_agent.__version__}")
-    assert explainable_agent.__version__ == "0.1.4", f"Expected 0.1.4, got {explainable_agent.__version__}"
+    assert explainable_agent.__version__ == "0.2.0", f"Expected 0.2.0, got {explainable_agent.__version__}"
 
     results = []
 

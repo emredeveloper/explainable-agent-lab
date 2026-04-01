@@ -17,6 +17,8 @@ class Settings:
     workspace_root: Path
     temperature: float
     chaos_mode: bool
+    use_native_tools: bool = False
+    stream: bool = False
 
     def with_overrides(
         self,
@@ -30,6 +32,8 @@ class Settings:
         workspace_root: Path | None = None,
         temperature: float | None = None,
         chaos_mode: bool | None = None,
+        use_native_tools: bool | None = None,
+        stream: bool | None = None,
     ) -> "Settings":
         return replace(
             self,
@@ -52,6 +56,8 @@ class Settings:
             ),
             temperature=temperature if temperature is not None else self.temperature,
             chaos_mode=chaos_mode if chaos_mode is not None else self.chaos_mode,
+            use_native_tools=use_native_tools if use_native_tools is not None else self.use_native_tools,
+            stream=stream if stream is not None else self.stream,
         )
 
     @classmethod
@@ -75,4 +81,6 @@ class Settings:
             workspace_root=Path(os.getenv("AGENT_WORKSPACE", ".")).resolve(),
             temperature=float(os.getenv("AGENT_TEMPERATURE", "0.2")),
             chaos_mode=os.getenv("AGENT_CHAOS_MODE", "false").lower() == "true",
+            use_native_tools=os.getenv("AGENT_NATIVE_TOOLS", "false").lower() == "true",
+            stream=os.getenv("AGENT_STREAM", "false").lower() == "true",
         )

@@ -11,13 +11,13 @@ pip install -e .[dev]
 ## Run tests
 
 ```bash
-pytest -q
+python -m unittest discover
 ```
 
 If your Windows temp directory is restricted, run with a local base temp:
 
 ```bash
-pytest -q --basetemp .pytest_tmp
+python -m unittest discover
 ```
 
 ## Project conventions

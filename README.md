@@ -120,4 +120,4 @@ The agent comes with out-of-the-box tools ready to use:
 `duckduckgo_search`, `calculate_math`, `read_text_file`, `list_workspace_files`, `now_utc`, `sqlite_init_demo`, `sqlite_list_tables`, `sqlite_describe_table`, `sqlite_query`, `sqlite_execute`.
 
 ---
-*License: MIT | Current Release: v0.1.4*
+*License: MIT | Current Release: v0.2.0*

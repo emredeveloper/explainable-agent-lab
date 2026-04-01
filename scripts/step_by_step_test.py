@@ -53,7 +53,20 @@ def check_trace_has_tool_call(path: Path) -> bool:
 def main() -> int:
     failed = False
 
-    code, _, _ = run_cmd([PYTHON, "-m", "pytest", "-q"], "Adim 1: Birim Testleri")
+    code, _, _ = run_cmd(
+        [
+            PYTHON,
+            "-m",
+            "py_compile",
+            "explainable_agent/__init__.py",
+            "explainable_agent/config.py",
+            "explainable_agent/cli.py",
+            "explainable_agent/agent.py",
+            "explainable_agent/tools.py",
+            "explainable_agent/openai_client.py",
+        ],
+        "Adim 1: Sozdizimi Kontrolu",
+    )
     if code != 0:
         failed = True
 

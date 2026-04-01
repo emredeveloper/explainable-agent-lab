@@ -331,6 +331,250 @@ class ExplainableAgent:
             workspace_root=self.settings.workspace_root,
         )
 
+    def _skip_expensive_quality_passes(self) -> bool:
+        provider_hint = getattr(self.client, "_provider_prefers_plain_decisions", None)
+        if callable(provider_hint):
+            return bool(provider_hint())
+        return False
+
+    def _build_initial_messages(self, task: str) -> list[dict[str, str]]:
+        return [
+            {
+                "role": "user",
+                "content": (
+                    f"User task:\n{task}\n\n"
+                    f"Available tools:\n{tool_catalog_text()}\n\n"
+                    f"Tool catalog JSON:\n{tool_catalog_payload()}\n\n"
+                    "Select only one tool per step if necessary."
+                ),
+            }
+        ]
+
+    def _request_decision(
+        self,
+        *,
+        resolved_model: str,
+        messages: list[dict[str, str]],
+    ) -> tuple[Decision, str, int, dict[str, int]]:
+        if self.settings.use_native_tools:
+            return self.client.get_decision_native(
+                model=resolved_model,
+                messages=messages,
+                temperature=self.settings.temperature,
+                reasoning_effort=self.settings.reasoning_effort,
+            )
+        if self.settings.stream:
+            stream_tokens: list[str] = []
+
+            def _on_token(tok: str) -> None:
+                stream_tokens.append(tok)
+                if self.verbose:
+                    console.print(tok, end="", highlight=False)
+
+            decision, raw_output, latency_ms, usage = self.client.get_decision_stream(
+                model=resolved_model,
+                messages=messages,
+                temperature=self.settings.temperature,
+                reasoning_effort=self.settings.reasoning_effort,
+                on_token=_on_token,
+            )
+            if self.verbose and stream_tokens:
+                console.print()
+            return decision, raw_output, latency_ms, usage
+        return self.client.get_decision(
+            model=resolved_model,
+            messages=messages,
+            temperature=self.settings.temperature,
+            reasoning_effort=self.settings.reasoning_effort,
+        )
+
+    @staticmethod
+    def _usage_counts(usage: dict[str, int]) -> tuple[int, int, int]:
+        return (
+            usage.get("prompt_tokens", 0),
+            usage.get("completion_tokens", 0),
+            usage.get("total_tokens", 0),
+        )
+
+    def _append_tool_followup_message(
+        self,
+        *,
+        messages: list[dict[str, str]],
+        tool_name: str,
+        tool_output: str,
+    ) -> None:
+        content_text = f"Tool result ('{tool_name}'):\n{tool_output}\n\n"
+        if tool_output.startswith("ERROR:"):
+            content_text += (
+                "ERROR received from previous tool. Please use the "
+                "'error_analysis' and 'proposed_fix' fields in the JSON to state "
+                "the cause of the error and how to fix it. WARNING: You MUST call "
+                "a new tool by setting action='tool_call' to fix the error. Only "
+                "use final_answer if you absolutely cannot find a solution. Also, "
+                "DO NOT FORGET to fill in the 'tool_name' and 'tool_input' fields "
+                "in the JSON!"
+            )
+        else:
+            content_text += "Select the next step."
+        messages.append({"role": "user", "content": content_text})
+
+    def _record_step(
+        self,
+        *,
+        steps: list[StepTrace],
+        step: int,
+        raw_output: str,
+        decision: Decision,
+        tool_output: str | None,
+        latency_ms: int,
+        usage: dict[str, int] | None,
+        decision_source: str,
+        decision_notes: list[str],
+        why_tool: str,
+    ) -> None:
+        prompt_tokens, completion_tokens, total_tokens = self._usage_counts(usage or {})
+        audit = _build_step_audit(
+            decision=decision,
+            source=decision_source,
+            notes=decision_notes,
+            tool_output=tool_output,
+            why_tool=why_tool,
+        )
+        steps.append(
+            StepTrace(
+                step=step,
+                model_output=raw_output,
+                decision=decision,
+                tool_output=tool_output,
+                latency_ms=latency_ms,
+                model_output_length=len(raw_output or ""),
+                tool_output_length=len(tool_output or ""),
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                total_tokens=total_tokens,
+                audit=audit,
+            )
+        )
+
+    def _apply_first_step_heuristics(
+        self,
+        *,
+        task: str,
+        steps: list[StepTrace],
+        decision: Decision,
+        raw_output: str,
+    ) -> tuple[Decision, str, str, list[str]]:
+        decision_source = "model"
+        decision_notes: list[str] = []
+        suggestion = _heuristic_tool_suggestion(task) if not steps else None
+
+        if suggestion and decision.action == "tool_call":
+            tool_name, tool_input = suggestion
+            if _should_override_first_tool(decision.tool_name, tool_name):
+                decision = Decision(
+                    action="tool_call",
+                    rationale=(
+                        "Heuristic correction: tool selected according to task signal in first step."
+                    ),
+                    confidence=max(decision.confidence, 0.7),
+                    evidence=[
+                        "Distinct structural signal detected in first step.",
+                        "Deterministic tool selection applied for more stable execution.",
+                    ],
+                    tool_name=tool_name,
+                    tool_input=tool_input,
+                )
+                raw_output = raw_output + "\n[heuristic_override_tool_correction]"
+                decision_source = "heuristic_override"
+                decision_notes.append(
+                    "Heuristic correction for tool applied in first step."
+                )
+
+        if suggestion and decision.action == "final_answer":
+            tool_name, tool_input = suggestion
+            decision = Decision(
+                action="tool_call",
+                rationale="Heuristic correction: task has direct math/SQL/file signal.",
+                confidence=max(decision.confidence, 0.7),
+                evidence=[
+                    "Structural task signal requires tool usage.",
+                    "Early final answer prevented in first step.",
+                ],
+                tool_name=tool_name,
+                tool_input=tool_input,
+            )
+            raw_output = raw_output + "\n[heuristic_override_tool_call]"
+            decision_source = "heuristic_override"
+            decision_notes.append(
+                "Early final prevented in first step, forced tool call."
+            )
+
+        return decision, raw_output, decision_source, decision_notes
+
+    def _run_explicit_tool_step(
+        self,
+        *,
+        task: str,
+        messages: list[dict[str, str]],
+        steps: list[StepTrace],
+    ) -> int:
+        explicit_tool_request = _extract_explicit_tool_request(task)
+        if not explicit_tool_request:
+            return 1
+
+        tool_name, tool_input = explicit_tool_request
+        tool_output = self._execute_tool(tool_name=tool_name, tool_input=tool_input)
+        decision = Decision(
+            action="tool_call",
+            rationale="Explicit tool request applied directly.",
+            confidence=1.0,
+            evidence=[
+                "Tool name explicitly provided in task text.",
+                "First step routed to deterministic tool.",
+            ],
+            tool_name=tool_name,
+            tool_input=tool_input,
+        )
+        self._record_step(
+            steps=steps,
+            step=1,
+            raw_output="[deterministic_tool_call]",
+            decision=decision,
+            tool_output=tool_output,
+            latency_ms=0,
+            usage=None,
+            decision_source="explicit_request",
+            decision_notes=["LLM step skipped because explicit tool name found in task."],
+            why_tool="Tool name explicitly mentioned in user text.",
+        )
+        messages.append(
+            {
+                "role": "assistant",
+                "content": (
+                    f"Deterministic tool call executed: {tool_name}\n"
+                    f"Input: {tool_input}\nOutput:\n{tool_output}"
+                ),
+            }
+        )
+
+        explicit_next_prompt = (
+            "Provide a short final answer based on the tool result. Return decision "
+            "in valid JSON format."
+        )
+        if tool_output.startswith("ERROR:"):
+            explicit_next_prompt = (
+                "ERROR received from previous tool. Please state the cause of the "
+                "error and how to fix it using the 'error_analysis' and "
+                "'proposed_fix' fields in the JSON. WARNING: You MUST call a new "
+                "tool by setting action='tool_call' to fix the error. Also, DO NOT "
+                "FORGET to fill in the 'tool_name' and 'tool_input' fields in the "
+                "JSON!"
+            )
+
+        messages.append({"role": "user", "content": explicit_next_prompt})
+        self._print_step(1, decision, tool_output, latency_ms=0, audit=steps[-1].audit)
+        return 2
+
     def _print_developer_roadmap(
         self,
         task: str,
@@ -452,6 +696,12 @@ class ExplainableAgent:
                     parts.append(f"Step {s.step} final_answer")
             content.append(" -> ".join(parts) + "\n")
 
+            total_tokens = sum(s.total_tokens for s in steps)
+            if total_tokens > 0:
+                total_prompt = sum(s.prompt_tokens for s in steps)
+                total_completion = sum(s.completion_tokens for s in steps)
+                content.append("Tokens: ", style="bold")
+                content.append(f"prompt={total_prompt}, completion={total_completion}, total={total_tokens}\n")
             if trace.errors:
                 content.append("Errors / auto-fixes: ", style="bold yellow")
                 content.append("; ".join(trace.errors) + "\n")
@@ -500,166 +750,47 @@ class ExplainableAgent:
         if self.verbose:
             self._print_developer_roadmap(task=task, resolved_model=resolved_model)
 
-        messages: list[dict[str, str]] = [
-            {
-                "role": "user",
-                "content": (
-                    f"User task:\n{task}\n\n"
-                    f"Available tools:\n{tool_catalog_text()}\n\n"
-                    f"Tool catalog JSON:\n{tool_catalog_payload()}\n\n"
-                    "Select only one tool per step if necessary."
-                ),
-            }
-        ]
+        messages = self._build_initial_messages(task)
 
         steps: list[StepTrace] = []
         errors: list[str] = []
         final_answer = ""
-        explicit_tool_request = _extract_explicit_tool_request(task)
-
-        loop_start = 1
-        if explicit_tool_request:
-            tool_name, tool_input = explicit_tool_request
-            tool_output = self._execute_tool(
-                tool_name=tool_name,
-                tool_input=tool_input,
-            )
-            steps.append(
-                StepTrace(
-                    step=1,
-                    model_output="[deterministic_tool_call]",
-                    decision=Decision(
-                        action="tool_call",
-                        rationale="Explicit tool request applied directly.",
-                        confidence=1.0,
-                        evidence=[
-                            "Tool name explicitly provided in task text.",
-                            "First step routed to deterministic tool.",
-                        ],
-                        tool_name=tool_name,
-                        tool_input=tool_input,
-                    ),
-                    tool_output=tool_output,
-                    latency_ms=0,
-                    model_output_length=len("[deterministic_tool_call]"),
-                    tool_output_length=len(tool_output or ""),
-                    audit={
-                        "source": "explicit_request",
-                        "why_tool": "Tool name explicitly mentioned in user text.",
-                        "notes": [
-                            "LLM step skipped because explicit tool name found in task."
-                        ],
-                        "warnings": [],
-                    },
-                )
-            )
-            messages.append(
-                {
-                    "role": "assistant",
-                    "content": (
-                        f"Deterministic tool call executed: {tool_name}\n"
-                        f"Input: {tool_input}\nOutput:\n{tool_output}"
-                    ),
-                }
-            )
-
-            explicit_next_prompt = "Provide a short final answer based on the tool result. Return decision in valid JSON format."
-            if tool_output and tool_output.startswith("ERROR:"):
-                explicit_next_prompt = "ERROR received from previous tool. Please state the cause of the error and how to fix it using the 'error_analysis' and 'proposed_fix' fields in the JSON. WARNING: You MUST call a new tool by setting action='tool_call' to fix the error. Also, DO NOT FORGET to fill in the 'tool_name' and 'tool_input' fields in the JSON!"
-
-            messages.append(
-                {
-                    "role": "user",
-                    "content": explicit_next_prompt,
-                }
-            )
-            self._print_step(
-                1,
-                steps[0].decision,
-                tool_output,
-                latency_ms=0,
-                audit=steps[0].audit,
-            )
-            loop_start = 2
+        loop_start = self._run_explicit_tool_step(task=task, messages=messages, steps=steps)
 
         for step in range(loop_start, self.settings.max_steps + 1):
-            decision, raw_output, latency_ms = self.client.get_decision(
-                model=resolved_model,
+            decision, raw_output, latency_ms, usage = self._request_decision(
+                resolved_model=resolved_model,
                 messages=messages,
-                temperature=self.settings.temperature,
-                reasoning_effort=self.settings.reasoning_effort,
             )
-            decision_source = "model"
-            decision_notes: list[str] = []
-
-            suggestion = _heuristic_tool_suggestion(task) if not steps else None
-            if suggestion and decision.action == "tool_call":
-                tool_name, tool_input = suggestion
-                if _should_override_first_tool(decision.tool_name, tool_name):
-                    decision = Decision(
-                        action="tool_call",
-                        rationale=(
-                            "Heuristic correction: tool selected according to task signal in first step."
-                        ),
-                        confidence=max(decision.confidence, 0.7),
-                        evidence=[
-                            "Distinct structural signal detected in first step.",
-                            "Deterministic tool selection applied for more stable execution.",
-                        ],
-                        tool_name=tool_name,
-                        tool_input=tool_input,
-                    )
-                    raw_output = raw_output + "\n[heuristic_override_tool_correction]"
-                    decision_source = "heuristic_override"
-                    decision_notes.append("Heuristic correction for tool applied in first step.")
-
-            if suggestion and decision.action == "final_answer":
-                tool_name, tool_input = suggestion
-                decision = Decision(
-                    action="tool_call",
-                    rationale=(
-                        "Heuristic correction: task has direct math/SQL/file signal."
-                    ),
-                    confidence=max(decision.confidence, 0.7),
-                    evidence=[
-                        "Structural task signal requires tool usage.",
-                        "Early final answer prevented in first step.",
-                    ],
-                    tool_name=tool_name,
-                    tool_input=tool_input,
+            decision, raw_output, decision_source, decision_notes = (
+                self._apply_first_step_heuristics(
+                    task=task,
+                    steps=steps,
+                    decision=decision,
+                    raw_output=raw_output,
                 )
-                raw_output = raw_output + "\n[heuristic_override_tool_call]"
-                decision_source = "heuristic_override"
-                decision_notes.append(
-                    "Early final prevented in first step, forced tool call."
-                )
+            )
 
             if decision.action == "tool_call":
                 tool_output = self._execute_tool(
                     tool_name=decision.tool_name or "",
                     tool_input=decision.tool_input or "",
                 )
-                steps.append(
-                    StepTrace(
-                        step=step,
-                        model_output=raw_output,
-                        decision=decision,
-                        tool_output=tool_output,
-                        latency_ms=latency_ms,
-                        model_output_length=len(raw_output or ""),
-                        tool_output_length=len(tool_output or ""),
-                        audit=_build_step_audit(
-                            decision=decision,
-                            source=decision_source,
-                            notes=decision_notes,
-                            tool_output=tool_output,
-                            why_tool=(
-                                f"{decision.tool_name} selected; rationale: {decision.rationale}"
-                                if decision.tool_name
-                                else ""
-                            ),
-                        ),
-                    )
+                self._record_step(
+                    steps=steps,
+                    step=step,
+                    raw_output=raw_output,
+                    decision=decision,
+                    tool_output=tool_output,
+                    latency_ms=latency_ms,
+                    usage=usage,
+                    decision_source=decision_source,
+                    decision_notes=decision_notes,
+                    why_tool=(
+                        f"{decision.tool_name} selected; rationale: {decision.rationale}"
+                        if decision.tool_name
+                        else ""
+                    ),
                 )
                 self._print_step(
                     step,
@@ -669,38 +800,25 @@ class ExplainableAgent:
                     audit=steps[-1].audit,
                 )
                 messages.append({"role": "assistant", "content": raw_output})
-                content_text = f"Tool result ('{decision.tool_name}'):\n{tool_output}\n\n"
-                if tool_output and tool_output.startswith("ERROR:"):
-                    content_text += "ERROR received from previous tool. Please use the 'error_analysis' and 'proposed_fix' fields in the JSON to state the cause of the error and how to fix it. WARNING: You MUST call a new tool by setting action='tool_call' to fix the error. Only use final_answer if you absolutely cannot find a solution. Also, DO NOT FORGET to fill in the 'tool_name' and 'tool_input' fields in the JSON!"
-                else:
-                    content_text += "Select the next step."
-
-                messages.append(
-                    {
-                        "role": "user",
-                        "content": content_text,
-                    }
+                self._append_tool_followup_message(
+                    messages=messages,
+                    tool_name=decision.tool_name or "",
+                    tool_output=tool_output,
                 )
                 continue
 
             final_answer = decision.answer or ""
-            steps.append(
-                StepTrace(
-                    step=step,
-                    model_output=raw_output,
-                    decision=decision,
-                    tool_output=None,
-                    latency_ms=latency_ms,
-                    model_output_length=len(raw_output or ""),
-                    tool_output_length=0,
-                    audit=_build_step_audit(
-                        decision=decision,
-                        source=decision_source,
-                        notes=decision_notes,
-                        tool_output=None,
-                        why_tool="Final answer selected, new tool call not required.",
-                    ),
-                )
+            self._record_step(
+                steps=steps,
+                step=step,
+                raw_output=raw_output,
+                decision=decision,
+                tool_output=None,
+                latency_ms=latency_ms,
+                usage=usage,
+                decision_source=decision_source,
+                decision_notes=decision_notes,
+                why_tool="Final answer selected, new tool call not required.",
             )
             self._print_step(
                 step,
@@ -743,7 +861,7 @@ class ExplainableAgent:
                 if fallback:
                     final_answer = fallback
                     errors.append("Low quality final answer automatically corrected from tool result.")
-            else:
+            elif not self._skip_expensive_quality_passes():
                 final_answer = self.client.get_alternative_answer(
                     model=resolved_model,
                     task=task,
@@ -752,7 +870,7 @@ class ExplainableAgent:
                 )
                 errors.append("Low quality final answer refreshed with direct answer.")
 
-        if tool_used:
+        if tool_used and not self._skip_expensive_quality_passes():
             alternative_answer = self.client.get_alternative_answer(
                 model=resolved_model,
                 task=task,
@@ -768,6 +886,16 @@ class ExplainableAgent:
                 "Strong tool trace (low alternative similarity or high tool overlap)."
                 if likely_faithful
                 else "Weak tool trace: high alternative similarity and low tool overlap."
+            )
+        elif tool_used:
+            alternative_answer = "(skipped check: provider-optimized fast path)"
+            similarity = 0.0
+            threshold = 0.75
+            support_threshold = 0.25
+            support_score = tool_support_score(final_answer, steps)
+            likely_faithful = support_score >= support_threshold
+            note = (
+                "Faithfulness estimated from tool overlap only to keep local-provider latency low."
             )
         else:
             alternative_answer = "(skipped check: tool not used)"

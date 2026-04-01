@@ -133,6 +133,9 @@ def _to_compact_trace(trace: RunTrace) -> dict[str, object]:
                 "latency_ms": step.latency_ms,
                 "model_output_length": step.model_output_length,
                 "tool_output_length": step.tool_output_length,
+                "prompt_tokens": step.prompt_tokens,
+                "completion_tokens": step.completion_tokens,
+                "total_tokens": step.total_tokens,
             }
         )
     return {
@@ -221,7 +224,22 @@ def _to_markdown_report(trace: RunTrace) -> str:
         lines.append(f"- Latency: `{step.latency_ms} ms`")
         lines.append(f"- Model output length: `{step.model_output_length} chars`")
         lines.append(f"- Tool output length: `{step.tool_output_length} chars`")
+        if step.total_tokens > 0:
+            lines.append(f"- Tokens: prompt=`{step.prompt_tokens}`, completion=`{step.completion_tokens}`, total=`{step.total_tokens}`")
         lines.append("")
+    total_prompt = sum(s.prompt_tokens for s in trace.steps)
+    total_completion = sum(s.completion_tokens for s in trace.steps)
+    total_all = sum(s.total_tokens for s in trace.steps)
+    if total_all > 0:
+        lines.append("## Token Usage Summary")
+        lines.append("")
+        lines.append(f"| Metric | Value |")
+        lines.append(f"|--------|-------|")
+        lines.append(f"| Prompt tokens | `{total_prompt}` |")
+        lines.append(f"| Completion tokens | `{total_completion}` |")
+        lines.append(f"| Total tokens | `{total_all}` |")
+        lines.append("")
+
     if trace.errors:
         lines.append("## Errors")
         lines.append("")

@@ -71,6 +71,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="List installed models on the server.",
     )
     parser.add_argument(
+        "--temperature",
+        type=float,
+        default=None,
+        help="Sampling temperature (default: AGENT_TEMPERATURE or 0.2).",
+    )
+    parser.add_argument(
         "--verbose",
         action="store_true",
         help="Print steps to terminal with colors.",
@@ -79,6 +85,16 @@ def build_parser() -> argparse.ArgumentParser:
         "--chaos",
         action="store_true",
         help="Enable Chaos Mode to simulate random tool errors for testing self-healing.",
+    )
+    parser.add_argument(
+        "--native-tools",
+        action="store_true",
+        help="Use OpenAI native function calling API instead of JSON schema.",
+    )
+    parser.add_argument(
+        "--stream",
+        action="store_true",
+        help="Enable streaming output for LLM responses.",
     )
     return parser
 
@@ -104,8 +120,14 @@ def main() -> int:
         settings = settings.with_overrides(workspace_root=Path(args.workspace).resolve())
     if args.runs_dir:
         settings = settings.with_overrides(runs_dir=Path(args.runs_dir).resolve())
+    if args.temperature is not None:
+        settings = settings.with_overrides(temperature=args.temperature)
     if args.chaos:
         settings = settings.with_overrides(chaos_mode=True)
+    if args.native_tools:
+        settings = settings.with_overrides(use_native_tools=True)
+    if args.stream:
+        settings = settings.with_overrides(stream=True)
 
     client = OpenAICompatClient(base_url=settings.base_url, api_key=settings.api_key)
 

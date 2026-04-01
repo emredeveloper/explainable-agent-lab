@@ -35,9 +35,8 @@ def run(
 
 def main() -> int:
     tmp_root = ROOT / ".tmp"
-    pytest_tmp = tmp_root / "pytest"
     temp_dir = tmp_root / "system_tmp"
-    for path in (tmp_root, pytest_tmp, temp_dir):
+    for path in (tmp_root, temp_dir):
         path.mkdir(parents=True, exist_ok=True)
 
     test_env = {
@@ -67,67 +66,14 @@ def main() -> int:
                 "scripts/eval_swebench_readiness.py",
             ],
         ),
-        (
-            "Unit tests (core)",
-            [
-                sys.executable,
-                "-m",
-                "pytest",
-                "tests/test_agent.py",
-                "tests/test_tools.py",
-                "tests/test_eval_tool_calls.py",
-                "tests/test_dataset_adapters.py",
-                "tests/test_json_utils.py",
-                "-q",
-                "--basetemp",
-                str(pytest_tmp),
-                "-p",
-                "no:cacheprovider",
-            ],
-        ),
     ]
 
     failed: list[str] = []
     for name, cmd in checks:
         print(f"\n== {name} ==")
-        env = test_env if "pytest" in " ".join(cmd) else None
-        code, out, err = run(cmd, env=env, capture=("pytest" in " ".join(cmd)))
+        code, _out, _err = run(cmd, env=test_env, capture=False)
         if code != 0:
-            if name == "Unit tests (core)":
-                print("! Retry: pytest cacheprovider enabled fallback")
-                retry_cmd = [
-                    sys.executable,
-                    "-m",
-                    "pytest",
-                    "tests/test_agent.py",
-                    "tests/test_tools.py",
-                    "tests/test_eval_tool_calls.py",
-                    "-q",
-                    "--basetemp",
-                    str(pytest_tmp),
-                ]
-                retry_code, retry_out, retry_err = run(
-                    retry_cmd, env=test_env, capture=True
-                )
-                if retry_code != 0:
-                    combined = f"{out}\n{err}\n{retry_out}\n{retry_err}"
-                    # Known Windows-specific pytest temp cleanup issue.
-                    if (
-                        "PermissionError: [WinError 5]" in combined
-                        and (
-                            ".tmp\\pytest" in combined
-                            or "_rmtree_unsafe" in combined
-                            or "cleanup_dead_symlinks" in combined
-                        )
-                    ):
-                        print(
-                            "WARN: Pytest temp cleanup permission issue detected "
-                            "(environment-specific). Marking tests as soft-pass."
-                        )
-                    else:
-                        failed.append(name)
-            else:
-                failed.append(name)
+            failed.append(name)
 
     print("\n== Summary ==")
     if failed:

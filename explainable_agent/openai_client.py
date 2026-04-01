@@ -8,6 +8,7 @@ from typing import Any
 from openai import OpenAI
 
 from .schemas import Decision
+from .tools import openai_tool_definitions
 
 
 DECISION_SCHEMA = {
@@ -51,6 +52,7 @@ DECISION_SCHEMA = {
 
 class OpenAICompatClient:
     def __init__(self, base_url: str, api_key: str) -> None:
+        self.base_url = base_url.rstrip("/")
         self.client = OpenAI(base_url=base_url, api_key=api_key)
 
     def list_models(self) -> list[str]:
@@ -80,28 +82,156 @@ class OpenAICompatClient:
         messages: list[dict[str, str]],
         temperature: float,
         reasoning_effort: str,
-    ) -> tuple[Decision, str, int]:
-        system_prompt = self._build_decision_prompt(reasoning_effort)
-        full_messages = [{"role": "system", "content": system_prompt}, *messages]
-        started = time.perf_counter()
-        try:
-            response = self.client.chat.completions.create(
+    ) -> tuple[Decision, str, int, dict[str, int]]:
+        """Returns (decision, raw_content, latency_ms, token_usage)."""
+        if self._provider_prefers_plain_decisions():
+            response, latency_ms = self._create_chat_completion(
                 model=model,
-                messages=full_messages,
+                messages=self._with_system_prompt(
+                    self._build_decision_prompt(reasoning_effort), messages
+                ),
+                temperature=temperature,
+            )
+            return self._parse_decision_response(response, latency_ms)
+        try:
+            response, latency_ms = self._create_chat_completion(
+                model=model,
+                messages=self._with_system_prompt(
+                    self._build_decision_prompt(reasoning_effort), messages
+                ),
                 temperature=temperature,
                 response_format=DECISION_SCHEMA,
             )
         except Exception:  # noqa: BLE001
-            response = self.client.chat.completions.create(
+            response, latency_ms = self._create_chat_completion(
+                model=model,
+                messages=self._with_system_prompt(
+                    self._build_decision_prompt(reasoning_effort), messages
+                ),
+                temperature=temperature,
+            )
+        return self._parse_decision_response(response, latency_ms)
+
+    def get_decision_native(
+        self,
+        model: str,
+        messages: list[dict[str, str]],
+        temperature: float,
+        reasoning_effort: str,
+    ) -> tuple[Decision, str, int, dict[str, int]]:
+        """Use OpenAI native function calling (tools parameter).
+        Falls back to JSON parsing if the model doesn't return tool_calls."""
+        if self._provider_prefers_plain_decisions():
+            return self.get_decision(model, messages, temperature, reasoning_effort)
+        try:
+            response, latency_ms = self._create_chat_completion(
+                model=model,
+                messages=self._with_system_prompt(
+                    self._build_native_system_prompt(reasoning_effort), messages
+                ),
+                temperature=temperature,
+                tools=openai_tool_definitions(),
+                tool_choice="auto",
+            )
+        except Exception:  # noqa: BLE001
+            return self.get_decision(model, messages, temperature, reasoning_effort)
+
+        usage = self._extract_usage(response)
+        choice = response.choices[0]
+        content = choice.message.content or ""
+
+        tool_calls = getattr(choice.message, "tool_calls", None)
+        if tool_calls and len(tool_calls) > 0:
+            tc = tool_calls[0]
+            fn = tc.function
+            tool_name = fn.name
+            raw_args = fn.arguments or "{}"
+            try:
+                args = json.loads(raw_args)
+                tool_input = args.get("input", "")
+            except (json.JSONDecodeError, AttributeError):
+                tool_input = raw_args
+
+            decision = Decision(
+                action="tool_call",
+                rationale=f"Native function call: {tool_name}",
+                confidence=0.9,
+                evidence=["Model selected tool via native function calling API."],
+                tool_name=tool_name,
+                tool_input=str(tool_input),
+            )
+            raw_content = f"[native_tool_call] {tool_name}({raw_args})"
+            return decision, raw_content, latency_ms, usage
+
+        if content.strip():
+            payload = self._parse_json_payload(content)
+            if payload and payload.get("action"):
+                decision = self._to_decision(payload, fallback_text=content)
+                return decision, content, latency_ms, usage
+            decision = Decision(
+                action="final_answer",
+                rationale="Model provided direct text answer (no tool call).",
+                confidence=0.8,
+                evidence=["No tool_calls in response; using content as final answer."],
+                answer=content.strip(),
+            )
+            return decision, content, latency_ms, usage
+
+        return self.get_decision(model, messages, temperature, reasoning_effort)
+
+    def get_decision_stream(
+        self,
+        model: str,
+        messages: list[dict[str, str]],
+        temperature: float,
+        reasoning_effort: str,
+        on_token: Any | None = None,
+    ) -> tuple[Decision, str, int, dict[str, int]]:
+        """Streaming version: yields tokens via on_token callback, then parses."""
+        full_messages = self._with_system_prompt(
+            self._build_decision_prompt(reasoning_effort), messages
+        )
+        started = time.perf_counter()
+        chunks: list[str] = []
+        final_chunk: Any | None = None
+        try:
+            stream = self.client.chat.completions.create(
                 model=model,
                 messages=full_messages,
                 temperature=temperature,
+                stream=True,
             )
+            for chunk in stream:
+                final_chunk = chunk
+                delta = chunk.choices[0].delta if chunk.choices else None
+                if delta and delta.content:
+                    chunks.append(delta.content)
+                    if on_token:
+                        on_token(delta.content)
+        except Exception:  # noqa: BLE001
+            return self.get_decision(model, messages, temperature, reasoning_effort)
+
         latency_ms = int((time.perf_counter() - started) * 1000)
-        content = response.choices[0].message.content or ""
+        content = "".join(chunks)
+        usage_raw = getattr(final_chunk, "usage", None) if final_chunk is not None else None
+        if usage_raw:
+            usage = {
+                "prompt_tokens": getattr(usage_raw, "prompt_tokens", 0) or 0,
+                "completion_tokens": getattr(usage_raw, "completion_tokens", 0) or 0,
+                "total_tokens": getattr(usage_raw, "total_tokens", 0) or 0,
+            }
+        else:
+            usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
         payload = self._parse_json_payload(content)
         decision = self._to_decision(payload, fallback_text=content)
-        return decision, content, latency_ms
+        return decision, content, latency_ms, usage
+
+    @staticmethod
+    def _build_native_system_prompt(reasoning_effort: str) -> str:
+        return f"""You are an explainable agent planner.
+Reasoning effort: {reasoning_effort}.
+Select one tool per turn if needed. If you have enough information, respond with a plain text answer.
+Provide clear reasoning in your responses."""
 
     def get_alternative_answer(
         self,
@@ -111,7 +241,7 @@ class OpenAICompatClient:
         reasoning_effort: str,
     ) -> str:
         system_prompt = self._build_final_prompt(reasoning_effort)
-        response = self.client.chat.completions.create(
+        response, _latency_ms = self._create_chat_completion(
             model=model,
             messages=[
                 {"role": "system", "content": system_prompt},
@@ -120,6 +250,54 @@ class OpenAICompatClient:
             temperature=temperature,
         )
         return (response.choices[0].message.content or "").strip()
+
+    def _parse_decision_response(
+        self, response: Any, latency_ms: int
+    ) -> tuple[Decision, str, int, dict[str, int]]:
+        content = response.choices[0].message.content or ""
+        usage = self._extract_usage(response)
+        payload = self._parse_json_payload(content)
+        decision = self._to_decision(payload, fallback_text=content)
+        return decision, content, latency_ms, usage
+
+    def _create_chat_completion(
+        self,
+        *,
+        model: str,
+        messages: list[dict[str, str]],
+        temperature: float,
+        **kwargs: Any,
+    ) -> tuple[Any, int]:
+        started = time.perf_counter()
+        response = self.client.chat.completions.create(
+            model=model,
+            messages=messages,
+            temperature=temperature,
+            **kwargs,
+        )
+        latency_ms = int((time.perf_counter() - started) * 1000)
+        return response, latency_ms
+
+    @staticmethod
+    def _with_system_prompt(
+        system_prompt: str, messages: list[dict[str, str]]
+    ) -> list[dict[str, str]]:
+        return [{"role": "system", "content": system_prompt}, *messages]
+
+    def _provider_prefers_plain_decisions(self) -> bool:
+        base_url = getattr(self, "base_url", "")
+        return "localhost:11434" in base_url or "127.0.0.1:11434" in base_url
+
+    @staticmethod
+    def _extract_usage(response: Any) -> dict[str, int]:
+        usage = getattr(response, "usage", None)
+        if usage is None:
+            return {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+        return {
+            "prompt_tokens": getattr(usage, "prompt_tokens", 0) or 0,
+            "completion_tokens": getattr(usage, "completion_tokens", 0) or 0,
+            "total_tokens": getattr(usage, "total_tokens", 0) or 0,
+        }
 
     @staticmethod
     def _build_decision_prompt(reasoning_effort: str) -> str:
