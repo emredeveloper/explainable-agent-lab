@@ -23,7 +23,20 @@ Install directly from PyPI:
 pip install explainable-agent
 ```
 
-*(Optional: for development, clone the repo and run `pip install -e .[dev]`)*
+PyPI currently publishes `0.2.5` (released May 3, 2026). If PyPI is behind a future GitHub release, install the repository version instead:
+```bash
+pip install "git+https://github.com/emredeveloper/explainable-agent-lab.git@v0.2.5"
+```
+
+For development, clone the repo and run:
+```bash
+pip install -e ".[dev]"
+```
+
+Check the installed package version with:
+```bash
+python -c "import explainable_agent; print(explainable_agent.__version__)"
+```
 
 ### 2. Connect Your Local LLM
 You can use any OpenAI-compatible local server like **Ollama** or **LM Studio**.
@@ -52,15 +65,25 @@ explainable-agent \
 Easily integrate the agent into your codebase or create custom tools using the `@define_tool` decorator.
 
 Check out the `examples/` directory:
-- [`examples/showcase_all_features.py`](examples/showcase_all_features.py) - A comprehensive test script demonstrating Built-in Tools, Custom Tools, Self-Healing, Chaos Mode, and Evaluation.
-- [`examples/basic_usage.py`](examples/basic_usage.py) - Initialize and run the agent programmatically.
-- [`examples/custom_tool_usage.py`](examples/custom_tool_usage.py) - Learn how to build custom tools and watch the agent self-heal from errors.
-- [`examples/multi_agent_demo.py`](examples/multi_agent_demo.py) - Multi-agent orchestration: researcher + db_expert working together.
+- [`examples/basic_usage.py`](examples/basic_usage.py) - Small default smoke run using `.env`/CLI settings.
+- [`examples/custom_tool_usage.py`](examples/custom_tool_usage.py) - Register a custom Python tool and call it through the agent.
+- [`examples/showcase_all_features.py`](examples/showcase_all_features.py) - Compact local showcase for math, SQLite, custom tools, optional chaos mode, and optional JSONL eval.
+- [`examples/multi_agent_demo.py`](examples/multi_agent_demo.py) - Multi-agent orchestration with a researcher and SQLite specialist.
 
-Run the showcase:
+Run quick examples with Ollama:
 ```bash
-python examples/showcase_all_features.py
+python examples/basic_usage.py \
+  --base-url http://localhost:11434/v1 \
+  --api-key ollama \
+  --model qwen3.5:9b
+
+python examples/showcase_all_features.py \
+  --base-url http://localhost:11434/v1 \
+  --api-key ollama \
+  --model qwen3.5:9b
 ```
+
+Use `--include-sqlite`, `--include-custom`, `--include-chaos`, or `--include-eval` on the showcase when you want the slower optional scenarios.
 
 ---
 
@@ -122,4 +145,4 @@ The agent comes with out-of-the-box tools ready to use:
 `duckduckgo_search` remains the tool name in the API, while the underlying search dependency is provided by `ddgs`.
 
 ---
-*License: MIT | Current Release: v0.2.0*
+*License: MIT | Current Release: v0.2.5*

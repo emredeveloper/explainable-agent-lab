@@ -1,13 +1,15 @@
 from __future__ import annotations
 
-from datetime import datetime
 import json
+from datetime import datetime
 from pathlib import Path
 
-from .schemas import RunTrace, OrchestratorRunTrace
+from .schemas import OrchestratorRunTrace, RunTrace
 
 
-def write_orchestrator_artifacts(trace: OrchestratorRunTrace, runs_dir: Path) -> tuple[Path, Path]:
+def write_orchestrator_artifacts(
+    trace: OrchestratorRunTrace, runs_dir: Path
+) -> tuple[Path, Path]:
     run_dir = runs_dir / trace.run_id
     run_dir.mkdir(parents=True, exist_ok=True)
 
@@ -18,7 +20,7 @@ def write_orchestrator_artifacts(trace: OrchestratorRunTrace, runs_dir: Path) ->
         json.dumps(trace.to_dict(), indent=2, ensure_ascii=False),
         encoding="utf-8",
     )
-    
+
     lines = []
     lines.append("# Explainable Multi-Agent Orchestration Report")
     lines.append("")
@@ -34,18 +36,23 @@ def write_orchestrator_artifacts(trace: OrchestratorRunTrace, runs_dir: Path) ->
     lines.append("")
     lines.append(trace.final_synthesis or "(empty)")
     lines.append("")
-    
+
     lines.append("## Delegation Plan & Sub-Agent Traces")
     lines.append("")
     for i, st in enumerate(trace.subtasks):
-        lines.append(f"### Subtask {i+1}: Assigned to `{st.agent_name}`")
+        lines.append(f"### Subtask {i + 1}: Assigned to `{st.agent_name}`")
         lines.append(f"- **Assigned Task:** {st.assigned_task}")
         lines.append(f"- **Orchestrator Rationale:** {st.orchestrator_rationale}")
         lines.append(f"- **Sub-Agent Final Answer:** {st.trace.final_answer}")
-        
+
         # Extract SQL statements and outputs for sqlite tools
         sql_steps = [
-            (s.step, s.decision.tool_name, s.decision.tool_input or "", s.tool_output or "")
+            (
+                s.step,
+                s.decision.tool_name,
+                s.decision.tool_input or "",
+                s.tool_output or "",
+            )
             for s in st.trace.steps
             if s.decision.tool_name and s.decision.tool_name.startswith("sqlite_")
         ]
@@ -54,27 +61,35 @@ def write_orchestrator_artifacts(trace: OrchestratorRunTrace, runs_dir: Path) ->
             for step_num, tool_name, tool_input, tool_output in sql_steps:
                 lines.append(f"  - Step {step_num} (`{tool_name}`):")
                 if tool_input.strip():
-                    lines.append(f"    ```sql")
+                    lines.append("    ```sql")
                     for ln in tool_input.strip().split("\n"):
                         lines.append(f"    {ln}")
-                    lines.append(f"    ```")
-                lines.append(f"    Result: `{tool_output[:200]}{'...' if len(tool_output) > 200 else ''}`")
-        
+                    lines.append("    ```")
+                lines.append(
+                    f"    Result: `{tool_output[:200]}{'...' if len(tool_output) > 200 else ''}`"
+                )
+
         # Count steps and errors
         step_count = len(st.trace.steps)
         error_count = len([s for s in st.trace.steps if s.decision.error_analysis])
-        lines.append(f"- **Sub-Agent Stats:** {step_count} steps taken, {error_count} self-healing events.")
+        lines.append(
+            f"- **Sub-Agent Stats:** {step_count} steps taken, {error_count} self-healing events."
+        )
         lines.append("")
-    
+
     lines.append("## How to View SQL Results")
     lines.append("")
     lines.append("To query the database and see the inserted data, run:")
     lines.append("```bash")
-    lines.append('explainable-agent --task "sqlite_query: SELECT * FROM ai_news" --verbose')
+    lines.append(
+        'explainable-agent --task "sqlite_query: SELECT * FROM ai_news" --verbose'
+    )
     lines.append("```")
-    lines.append("(Or use `sqlite_query: SELECT * FROM customers` for the demo tables.)")
+    lines.append(
+        "(Or use `sqlite_query: SELECT * FROM customers` for the demo tables.)"
+    )
     lines.append("")
-        
+
     lines.append("## Orchestrator Diagnostics & Improvement Suggestions")
     lines.append("")
     if not trace.diagnostics:
@@ -83,7 +98,7 @@ def write_orchestrator_artifacts(trace: OrchestratorRunTrace, runs_dir: Path) ->
         for diag in trace.diagnostics:
             lines.append(f"- {diag}")
     lines.append("")
-    
+
     report_path.write_text("\n".join(lines), encoding="utf-8")
     return trace_path, report_path
 
@@ -209,7 +224,9 @@ def _to_markdown_report(trace: RunTrace) -> str:
         lines.append(f"- Confidence: `{step.decision.confidence:.2f}`")
         lines.append(f"- Evidence: {', '.join(step.decision.evidence)}")
         if step.decision.error_analysis:
-            lines.append(f"- **Error Analysis (Self-Correction):** {step.decision.error_analysis}")
+            lines.append(
+                f"- **Error Analysis (Self-Correction):** {step.decision.error_analysis}"
+            )
         if step.decision.proposed_fix:
             lines.append(f"- **Proposed Fix:** {step.decision.proposed_fix}")
         if step.audit.get("notes"):
@@ -225,7 +242,9 @@ def _to_markdown_report(trace: RunTrace) -> str:
         lines.append(f"- Model output length: `{step.model_output_length} chars`")
         lines.append(f"- Tool output length: `{step.tool_output_length} chars`")
         if step.total_tokens > 0:
-            lines.append(f"- Tokens: prompt=`{step.prompt_tokens}`, completion=`{step.completion_tokens}`, total=`{step.total_tokens}`")
+            lines.append(
+                f"- Tokens: prompt=`{step.prompt_tokens}`, completion=`{step.completion_tokens}`, total=`{step.total_tokens}`"
+            )
         lines.append("")
     total_prompt = sum(s.prompt_tokens for s in trace.steps)
     total_completion = sum(s.completion_tokens for s in trace.steps)
@@ -233,8 +252,8 @@ def _to_markdown_report(trace: RunTrace) -> str:
     if total_all > 0:
         lines.append("## Token Usage Summary")
         lines.append("")
-        lines.append(f"| Metric | Value |")
-        lines.append(f"|--------|-------|")
+        lines.append("| Metric | Value |")
+        lines.append("|--------|-------|")
         lines.append(f"| Prompt tokens | `{total_prompt}` |")
         lines.append(f"| Completion tokens | `{total_completion}` |")
         lines.append(f"| Total tokens | `{total_all}` |")
@@ -251,7 +270,9 @@ def _to_markdown_report(trace: RunTrace) -> str:
     lines.append("")
     diagnostics = _generate_diagnostics(trace)
     if not diagnostics:
-        lines.append("- Agent completed the task without issues, no specific improvement suggestion.")
+        lines.append(
+            "- Agent completed the task without issues, no specific improvement suggestion."
+        )
     else:
         for diag in diagnostics:
             lines.append(f"- {diag}")
@@ -262,35 +283,50 @@ def _to_markdown_report(trace: RunTrace) -> str:
 
 def _generate_diagnostics(trace: RunTrace) -> list[str]:
     suggestions: list[str] = []
-    
+
     # 1. Self-Correction Success Analysis
     error_steps = [s for s in trace.steps if s.decision.error_analysis]
     if error_steps:
-        suggestions.append(f"Agent encountered an error {len(error_steps)} times and used self-correction ability.")
+        suggestions.append(
+            f"Agent encountered an error {len(error_steps)} times and used self-correction ability."
+        )
         last_error = error_steps[-1]
-        suggestions.append(f"  > Last encountered issue: '{last_error.decision.error_analysis}'")
+        suggestions.append(
+            f"  > Last encountered issue: '{last_error.decision.error_analysis}'"
+        )
         suggestions.append(f"  > Proposed fix: '{last_error.decision.proposed_fix}'")
-    
+
     # 2. Repeated tool usage (Looping/Stuck)
     tool_names = [s.decision.tool_name for s in trace.steps if s.decision.tool_name]
     if len(tool_names) > 2:
         for i in range(len(tool_names) - 2):
-            if tool_names[i] == tool_names[i+1] == tool_names[i+2]:
-                suggestions.append(f"WARNING: Agent called the `{tool_names[i]}` tool 3 times in a row. This might be a sign of an infinite loop. Consider adding clearer instructions to the prompt regarding this tool.")
+            if tool_names[i] == tool_names[i + 1] == tool_names[i + 2]:
+                suggestions.append(
+                    f"WARNING: Agent called the `{tool_names[i]}` tool 3 times in a row. This might be a sign of an infinite loop. Consider adding clearer instructions to the prompt regarding this tool."
+                )
                 break
 
     # 3. Low Confidence Analysis
     low_conf_steps = [s for s in trace.steps if s.decision.confidence < 0.5]
     if low_conf_steps:
-        avg_conf = sum(s.decision.confidence for s in low_conf_steps) / len(low_conf_steps)
-        suggestions.append(f"Agent showed very low confidence score ({avg_conf:.2f}) in some steps. Consider providing more context to the system or extra information tools like web search.")
+        avg_conf = sum(s.decision.confidence for s in low_conf_steps) / len(
+            low_conf_steps
+        )
+        suggestions.append(
+            f"Agent showed very low confidence score ({avg_conf:.2f}) in some steps. Consider providing more context to the system or extra information tools like web search."
+        )
 
     # 4. Faithfulness Analysis
-    if trace.faithfulness.tool_support_score > 0 and not trace.faithfulness.likely_faithful:
-        suggestions.append("FAITHFULNESS WARNING: Agent used the tool successfully but the final answer does not sufficiently overlap with the tool output (Hallucination risk). Add the rule 'Only use the data coming from the tool, do not add your own interpretation' to the prompt.")
-        
+    if (
+        trace.faithfulness.tool_support_score > 0
+        and not trace.faithfulness.likely_faithful
+    ):
+        suggestions.append(
+            "FAITHFULNESS WARNING: Agent used the tool successfully but the final answer does not sufficiently overlap with the tool output (Hallucination risk). Add the rule 'Only use the data coming from the tool, do not add your own interpretation' to the prompt."
+        )
+
     # 5. Efficiency Diagnostics
-    if hasattr(trace, 'efficiency_diagnostics') and trace.efficiency_diagnostics:
+    if hasattr(trace, "efficiency_diagnostics") and trace.efficiency_diagnostics:
         suggestions.extend(trace.efficiency_diagnostics)
 
     return suggestions

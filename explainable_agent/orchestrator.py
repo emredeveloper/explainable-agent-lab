@@ -1,29 +1,35 @@
 from __future__ import annotations
 
-import json
 from datetime import datetime, timezone
 from uuid import uuid4
-from typing import Any
 
 from rich.console import Console
 from rich.panel import Panel
 
 from .agent import ExplainableAgent
+from .json_utils import parse_json_object_relaxed
 from .openai_client import OpenAICompatClient
 from .schemas import OrchestratorRunTrace, SubTaskTrace
-from .json_utils import parse_json_object_relaxed
 
 console = Console()
 
+
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
 
 class TeamOrchestrator:
     """
     Manages a team of ExplainableAgents, breaking down a main task,
     delegating it to sub-agents, and synthesizing the final answer.
     """
-    def __init__(self, client: OpenAICompatClient, agents: dict[str, tuple[str, ExplainableAgent]], verbose: bool = False):
+
+    def __init__(
+        self,
+        client: OpenAICompatClient,
+        agents: dict[str, tuple[str, ExplainableAgent]],
+        verbose: bool = False,
+    ):
         """
         :param agents: A dictionary mapping agent names to a tuple of (description, ExplainableAgent instance)
                        Example: {"researcher": ("Can search the web", agent1), "coder": ("Can write python code", agent2)}
@@ -32,7 +38,9 @@ class TeamOrchestrator:
         self.agents = agents
         self.verbose = verbose
 
-    def _generate_delegation_plan(self, main_task: str, requested_model: str) -> list[dict[str, str]]:
+    def _generate_delegation_plan(
+        self, main_task: str, requested_model: str
+    ) -> list[dict[str, str]]:
         agents_info = ""
         for name, (desc, _) in self.agents.items():
             agents_info += f"- Name: '{name}', Description: '{desc}'\n"
@@ -51,36 +59,42 @@ class TeamOrchestrator:
             "}\n"
         )
         user_prompt = f"Available Agents:\n{agents_info}\n\nMain Task:\n{main_task}"
-        
+
         messages = [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt}
+            {"role": "user", "content": user_prompt},
         ]
-        
+
         resolved_model = self.client.resolve_model(requested_model)
-        
+
         # Request JSON format specifically
         raw_output = self.client.get_alternative_answer(
             model=resolved_model,
             task=_messages_to_prompt(messages),
             temperature=0.0,
-            reasoning_effort="high"
+            reasoning_effort="high",
         )
-        
+
         payload, _ = parse_json_object_relaxed(raw_output)
-        if isinstance(payload, dict) and "plan" in payload and isinstance(payload["plan"], list):
+        if (
+            isinstance(payload, dict)
+            and "plan" in payload
+            and isinstance(payload["plan"], list)
+        ):
             return payload["plan"]
-            
+
         # Fallback if parsing fails entirely
         return []
 
-    def _synthesize_final_answer(self, main_task: str, subtasks: list[SubTaskTrace], requested_model: str) -> str:
+    def _synthesize_final_answer(
+        self, main_task: str, subtasks: list[SubTaskTrace], requested_model: str
+    ) -> str:
         synthesis_input = ""
         for st in subtasks:
             synthesis_input += f"--- Agent: {st.agent_name} ---\n"
             synthesis_input += f"Assigned Task: {st.assigned_task}\n"
             synthesis_input += f"Final Answer: {st.trace.final_answer}\n\n"
-            
+
         prompt = (
             "You are the Lead Orchestrator of a multi-agent AI system. Your agents have completed their subtasks.\n"
             f"Main Task: {main_task}\n\n"
@@ -89,91 +103,121 @@ class TeamOrchestrator:
             "Based on the results above, provide a comprehensive final synthesis that directly answers the Main Task. "
             "Do not output JSON, just write the final response clearly."
         )
-        
+
         resolved_model = self.client.resolve_model(requested_model)
         return self.client.get_alternative_answer(
-            model=resolved_model,
-            task=prompt,
-            temperature=0.2,
-            reasoning_effort="high"
+            model=resolved_model, task=prompt, temperature=0.2, reasoning_effort="high"
         )
 
     def _evaluate_orchestration(self, subtasks: list[SubTaskTrace]) -> list[str]:
         diagnostics = []
         if len(subtasks) == 0:
-            diagnostics.append("WARNING: Orchestrator failed to generate a delegation plan or parse it correctly.")
+            diagnostics.append(
+                "WARNING: Orchestrator failed to generate a delegation plan or parse it correctly."
+            )
             return diagnostics
-            
+
         # Check if tasks were too complex for sub-agents (e.g., taking too many steps)
         for st in subtasks:
             if len(st.trace.steps) >= 5:
-                diagnostics.append(f"Diagnostic: Sub-agent '{st.agent_name}' took {len(st.trace.steps)} steps to complete its task. The task ('{st.assigned_task[:50]}...') might have been too broad. Consider breaking it down further in the future.")
-            
+                diagnostics.append(
+                    f"Diagnostic: Sub-agent '{st.agent_name}' took {len(st.trace.steps)} steps to complete its task. The task ('{st.assigned_task[:50]}...') might have been too broad. Consider breaking it down further in the future."
+                )
+
             error_steps = [s for s in st.trace.steps if s.decision.error_analysis]
             if error_steps:
-                diagnostics.append(f"Diagnostic: Sub-agent '{st.agent_name}' encountered errors and had to self-heal {len(error_steps)} times during execution. This shows good resilience but may indicate vague instructions or failing external APIs.")
-                
+                diagnostics.append(
+                    f"Diagnostic: Sub-agent '{st.agent_name}' encountered errors and had to self-heal {len(error_steps)} times during execution. This shows good resilience but may indicate vague instructions or failing external APIs."
+                )
+
         # Check agent utilization
         used_agents = set(st.agent_name for st in subtasks)
         if len(used_agents) == 1 and len(self.agents) > 1:
-            diagnostics.append(f"Diagnostic: The orchestrator only utilized one agent ('{list(used_agents)[0]}') despite having {len(self.agents)} available. Ensure the task actually requires a multi-agent setup.")
-            
+            diagnostics.append(
+                f"Diagnostic: The orchestrator only utilized one agent ('{list(used_agents)[0]}') despite having {len(self.agents)} available. Ensure the task actually requires a multi-agent setup."
+            )
+
         return diagnostics
 
     def run(self, main_task: str, requested_model: str) -> OrchestratorRunTrace:
-        run_id = "orch_" + datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S") + "_" + uuid4().hex[:8]
+        run_id = (
+            "orch_"
+            + datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+            + "_"
+            + uuid4().hex[:8]
+        )
         started_at = _utc_now()
-        
+
         if self.verbose:
-            console.print(Panel(f"[bold white]Orchestrator Planning Phase[/bold white]\n[dim]Analyzing task and generating delegation plan...[/dim]", style="cyan"))
-            
+            console.print(
+                Panel(
+                    "[bold white]Orchestrator Planning Phase[/bold white]\n[dim]Analyzing task and generating delegation plan...[/dim]",
+                    style="cyan",
+                )
+            )
+
         plan = self._generate_delegation_plan(main_task, requested_model)
-        
+
         if self.verbose and plan:
             plan_str = ""
             for i, step in enumerate(plan):
-                plan_str += f"[bold yellow]{i+1}. {step.get('agent_name', 'Unknown')}[/bold yellow]: {step.get('assigned_task', '')}\n"
+                plan_str += f"[bold yellow]{i + 1}. {step.get('agent_name', 'Unknown')}[/bold yellow]: {step.get('assigned_task', '')}\n"
                 plan_str += f"   [dim italic]Rationale: {step.get('rationale', '')}[/dim italic]\n"
             console.print(Panel(plan_str, title="Delegation Plan", style="green"))
 
         subtask_traces: list[SubTaskTrace] = []
-        
+
         for step in plan:
             agent_name = step.get("agent_name", "")
             assigned_task = step.get("assigned_task", "")
             rationale = step.get("rationale", "")
-            
+
             if agent_name not in self.agents:
                 if self.verbose:
-                    console.print(f"[red]Error: Orchestrator tried to use unknown agent '{agent_name}'. Skipping.[/red]")
+                    console.print(
+                        f"[red]Error: Orchestrator tried to use unknown agent '{agent_name}'. Skipping.[/red]"
+                    )
                 continue
-                
+
             _, agent = self.agents[agent_name]
-            
+
             if self.verbose:
-                console.print(f"\n[bold magenta]>>> Handing over to Sub-Agent: {agent_name} <<<[/bold magenta]")
-                
+                console.print(
+                    f"\n[bold magenta]>>> Handing over to Sub-Agent: {agent_name} <<<[/bold magenta]"
+                )
+
             # Run the sub-agent
             trace = agent.run(assigned_task)
-            
-            subtask_traces.append(SubTaskTrace(
-                agent_name=agent_name,
-                assigned_task=assigned_task,
-                orchestrator_rationale=rationale,
-                trace=trace
-            ))
-            
+
+            subtask_traces.append(
+                SubTaskTrace(
+                    agent_name=agent_name,
+                    assigned_task=assigned_task,
+                    orchestrator_rationale=rationale,
+                    trace=trace,
+                )
+            )
+
             if self.verbose:
-                console.print(f"[bold magenta]<<< Sub-Agent {agent_name} finished. >>>[/bold magenta]\n")
-                
+                console.print(
+                    f"[bold magenta]<<< Sub-Agent {agent_name} finished. >>>[/bold magenta]\n"
+                )
+
         if self.verbose:
-            console.print(Panel("[bold white]Orchestrator Synthesis Phase[/bold white]\n[dim]Combining results into final answer...[/dim]", style="cyan"))
-            
-        final_synthesis = self._synthesize_final_answer(main_task, subtask_traces, requested_model)
-        
+            console.print(
+                Panel(
+                    "[bold white]Orchestrator Synthesis Phase[/bold white]\n[dim]Combining results into final answer...[/dim]",
+                    style="cyan",
+                )
+            )
+
+        final_synthesis = self._synthesize_final_answer(
+            main_task, subtask_traces, requested_model
+        )
+
         finished_at = _utc_now()
         diagnostics = self._evaluate_orchestration(subtask_traces)
-        
+
         return OrchestratorRunTrace(
             run_id=run_id,
             main_task=main_task,
@@ -181,8 +225,9 @@ class TeamOrchestrator:
             finished_at_utc=finished_at,
             subtasks=subtask_traces,
             final_synthesis=final_synthesis,
-            diagnostics=diagnostics
+            diagnostics=diagnostics,
         )
+
 
 def _messages_to_prompt(messages: list[dict[str, str]]) -> str:
     lines: list[str] = []

@@ -10,7 +10,6 @@ from openai import OpenAI
 from .schemas import Decision
 from .tools import openai_tool_definitions
 
-
 DECISION_SCHEMA = {
     "type": "json_schema",
     "json_schema": {
@@ -41,7 +40,7 @@ DECISION_SCHEMA = {
                 "tool_input",
                 "answer",
                 "error_analysis",
-                "proposed_fix"
+                "proposed_fix",
             ],
             "additionalProperties": False,
         },
@@ -213,7 +212,9 @@ class OpenAICompatClient:
 
         latency_ms = int((time.perf_counter() - started) * 1000)
         content = "".join(chunks)
-        usage_raw = getattr(final_chunk, "usage", None) if final_chunk is not None else None
+        usage_raw = (
+            getattr(final_chunk, "usage", None) if final_chunk is not None else None
+        )
         if usage_raw:
             usage = {
                 "prompt_tokens": getattr(usage_raw, "prompt_tokens", 0) or 0,
@@ -359,10 +360,11 @@ The response should be short, clear, and in English."""
 
         try:
             from json_repair import repair_json
+
             repaired = repair_json(content, return_objects=True)
             if isinstance(repaired, dict):
                 return repaired
-            
+
             if candidate:
                 repaired_candidate = repair_json(candidate, return_objects=True)
                 if isinstance(repaired_candidate, dict):
@@ -397,7 +399,9 @@ The response should be short, clear, and in English."""
         if action not in {"tool_call", "final_answer"}:
             action = "final_answer"
 
-        rationale = str(payload.get("rationale", "")).strip() or "No rationale provided."
+        rationale = (
+            str(payload.get("rationale", "")).strip() or "No rationale provided."
+        )
         raw_confidence = payload.get("confidence", 0.5)
         try:
             confidence = float(raw_confidence)
@@ -442,8 +446,9 @@ The response should be short, clear, and in English."""
                 str(answer).strip()
                 if answer
                 else (
-                     "Error analysis done but no new tool specified." 
-                     if error_analysis else "Tool call requested but tool_name is missing."
+                    "Error analysis done but no new tool specified."
+                    if error_analysis
+                    else "Tool call requested but tool_name is missing."
                 )
             )
         if action == "final_answer":

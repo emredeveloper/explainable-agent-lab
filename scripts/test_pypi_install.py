@@ -1,18 +1,19 @@
-
 import sys
-from pathlib import Path
 
-def run_test(name: str, base_url: str, model: str, task: str, chaos: bool = False) -> bool:
+
+def run_test(
+    name: str, base_url: str, model: str, task: str, chaos: bool = False
+) -> bool:
     from explainable_agent import ExplainableAgent, Settings
     from explainable_agent.openai_client import OpenAICompatClient
     from explainable_agent.report import write_run_artifacts
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"TEST: {name}")
     print(f"  Base URL: {base_url}")
     print(f"  Model: {model}")
     print(f"  Task: {task[:80]}...")
-    print("="*60)
+    print("=" * 60)
 
     settings = Settings.from_env().with_overrides(
         base_url=base_url,
@@ -37,53 +38,81 @@ def run_test(name: str, base_url: str, model: str, task: str, chaos: bool = Fals
 
 def main():
     import explainable_agent
+
     print(f"explainable-agent version: {explainable_agent.__version__}")
-    assert explainable_agent.__version__ == "0.2.0", f"Expected 0.2.0, got {explainable_agent.__version__}"
+    assert explainable_agent.__version__ == "0.2.5", (
+        f"Expected 0.2.5, got {explainable_agent.__version__}"
+    )
 
     results = []
 
     # --- OLLAMA (granite4:3b) ---
-    results.append(("Ollama: Math", run_test(
-        "Ollama granite4:3b - calculate_math",
-        base_url="http://localhost:11434/v1",
-        model="granite4:3b",
-        task="Calculate (15 * 7) + 23 using the calculate_math tool. Give the final number.",
-    )))
+    results.append(
+        (
+            "Ollama: Math",
+            run_test(
+                "Ollama granite4:3b - calculate_math",
+                base_url="http://localhost:11434/v1",
+                model="granite4:3b",
+                task="Calculate (15 * 7) + 23 using the calculate_math tool. Give the final number.",
+            ),
+        )
+    )
 
-    results.append(("Ollama: SQLite", run_test(
-        "Ollama granite4:3b - SQLite",
-        base_url="http://localhost:11434/v1",
-        model="granite4:3b",
-        task="Run sqlite_init_demo to create a demo DB, then use sqlite_query to SELECT name FROM customers LIMIT 3.",
-    )))
+    results.append(
+        (
+            "Ollama: SQLite",
+            run_test(
+                "Ollama granite4:3b - SQLite",
+                base_url="http://localhost:11434/v1",
+                model="granite4:3b",
+                task="Run sqlite_init_demo to create a demo DB, then use sqlite_query to SELECT name FROM customers LIMIT 3.",
+            ),
+        )
+    )
 
-    results.append(("Ollama: Chaos", run_test(
-        "Ollama granite4:3b - Chaos Mode",
-        base_url="http://localhost:11434/v1",
-        model="granite4:3b",
-        task="Calculate 100 + 50 using calculate_math.",
-        chaos=True,
-    )))
+    results.append(
+        (
+            "Ollama: Chaos",
+            run_test(
+                "Ollama granite4:3b - Chaos Mode",
+                base_url="http://localhost:11434/v1",
+                model="granite4:3b",
+                task="Calculate 100 + 50 using calculate_math.",
+                chaos=True,
+            ),
+        )
+    )
 
     # --- LM STUDIO ---
-    results.append(("LM Studio: Math", run_test(
-        "LM Studio - calculate_math",
-        base_url="http://localhost:1234/v1",
-        model="qwen/qwen3-vl-4b",
-        task="Calculate 42 * 17 using the calculate_math tool. Give the final number.",
-    )))
+    results.append(
+        (
+            "LM Studio: Math",
+            run_test(
+                "LM Studio - calculate_math",
+                base_url="http://localhost:1234/v1",
+                model="qwen/qwen3-vl-4b",
+                task="Calculate 42 * 17 using the calculate_math tool. Give the final number.",
+            ),
+        )
+    )
 
-    results.append(("LM Studio: SQLite", run_test(
-        "LM Studio - SQLite",
-        base_url="http://localhost:1234/v1",
-        model="qwen/qwen3-vl-4b",
-        task="Run sqlite_init_demo, then sqlite_query to SELECT email FROM customers LIMIT 2.",
-    )))
+    results.append(
+        (
+            "LM Studio: SQLite",
+            run_test(
+                "LM Studio - SQLite",
+                base_url="http://localhost:1234/v1",
+                model="qwen/qwen3-vl-4b",
+                task="Run sqlite_init_demo, then sqlite_query to SELECT email FROM customers LIMIT 2.",
+            ),
+        )
+    )
 
     # --- Summary ---
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("SUMMARY")
-    print("="*60)
+    print("=" * 60)
     for name, ok in results:
         status = "PASS" if ok else "FAIL"
         print(f"  {name}: {status}")

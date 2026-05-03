@@ -1,10 +1,9 @@
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
-import os
 from pathlib import Path
-
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -62,6 +61,10 @@ def main() -> int:
                 "explainable_agent/eval_tool_calls.py",
                 "explainable_agent/dataset_adapters.py",
                 "explainable_agent/json_utils.py",
+                "examples/basic_usage.py",
+                "examples/custom_tool_usage.py",
+                "examples/multi_agent_demo.py",
+                "examples/showcase_all_features.py",
                 "scripts/eval_hf_tool_calls.py",
                 "scripts/eval_swebench_readiness.py",
             ],

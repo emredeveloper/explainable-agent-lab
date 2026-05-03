@@ -150,11 +150,13 @@ def score_prediction(
     name_match = expected_names == predicted_names
 
     arg_match_count = 0
-    for exp, pred in zip(expected, predicted):
+    for exp, pred in zip(expected, predicted, strict=False):
         if _arguments_equal(exp["arguments"], pred["arguments"]):
             arg_match_count += 1
 
-    exact_match = call_count_match and name_match and (arg_match_count == expected_count)
+    exact_match = (
+        call_count_match and name_match and (arg_match_count == expected_count)
+    )
 
     error_type: str | None = None
     if parse_error:
@@ -381,7 +383,9 @@ def _normalize_identifier_list(value: Any) -> list[str]:
     if value is None:
         return []
     current = value
-    while isinstance(current, list) and len(current) == 1 and isinstance(current[0], list):
+    while (
+        isinstance(current, list) and len(current) == 1 and isinstance(current[0], list)
+    ):
         current = current[0]
     if not isinstance(current, list):
         current = [current]
@@ -403,7 +407,9 @@ def _normalize_condition_list(value: Any) -> list[str]:
     if value is None:
         return []
     current = value
-    while isinstance(current, list) and len(current) == 1 and isinstance(current[0], list):
+    while (
+        isinstance(current, list) and len(current) == 1 and isinstance(current[0], list)
+    ):
         current = current[0]
     if not isinstance(current, list):
         current = [current]
@@ -425,7 +431,9 @@ def _normalize_scalar_list(value: Any) -> list[Any]:
     if value is None:
         return []
     current = value
-    while isinstance(current, list) and len(current) == 1 and isinstance(current[0], list):
+    while (
+        isinstance(current, list) and len(current) == 1 and isinstance(current[0], list)
+    ):
         current = current[0]
     if not isinstance(current, list):
         current = [current]
@@ -450,7 +458,11 @@ def _normalize_insert_rows(value: Any) -> list[list[Any]]:
     normalized_rows: list[list[Any]] = []
     for row in rows:
         current = row
-        while isinstance(current, list) and len(current) == 1 and isinstance(current[0], list):
+        while (
+            isinstance(current, list)
+            and len(current) == 1
+            and isinstance(current[0], list)
+        ):
             current = current[0]
         if not isinstance(current, list):
             current = [current]
@@ -466,7 +478,9 @@ def _normalize_insert_rows(value: Any) -> list[list[Any]]:
     return normalized_rows
 
 
-def _arguments_equal(expected_args: dict[str, Any], predicted_args: dict[str, Any]) -> bool:
+def _arguments_equal(
+    expected_args: dict[str, Any], predicted_args: dict[str, Any]
+) -> bool:
     if expected_args == predicted_args:
         return True
 
@@ -610,7 +624,7 @@ def _insert_values_equal(expected: Any, predicted: Any) -> bool:
 
 
 def _score_rank(
-    result: tuple[bool, bool, bool, int, str | None]
+    result: tuple[bool, bool, bool, int, str | None],
 ) -> tuple[int, int, int, int]:
     exact_match, name_match, call_count_match, arg_match_count, _ = result
     return (
@@ -638,11 +652,7 @@ def _normalize_condition_scalar(raw: str) -> str:
     left = _normalize_identifier(left_raw)
     right = right_raw.strip()
     right = right.rstrip(";")
-    if (
-        len(right) >= 2
-        and right[0] == right[-1]
-        and right[0] in {"'", '"'}
-    ):
+    if len(right) >= 2 and right[0] == right[-1] and right[0] in {"'", '"'}:
         right = right[1:-1].strip()
 
     normalized_right = _normalize_scalar(right)

@@ -21,7 +21,6 @@ from explainable_agent.dataset_adapters import (
 )
 from explainable_agent.json_utils import parse_json_object_relaxed
 
-
 RESPONSE_SCHEMA = {
     "type": "json_schema",
     "json_schema": {
@@ -70,11 +69,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--limit", type=int, default=10)
     parser.add_argument("--runs-dir", type=str, default="runs/evals")
     parser.add_argument(
-        "--language", 
-        type=str, 
-        default="en", 
-        choices=["en"], 
-        help="Output language (en)."
+        "--language",
+        type=str,
+        default="en",
+        choices=["en"],
+        help="Output language (en).",
     )
     parser.add_argument(
         "--max-completion-tokens",
@@ -89,7 +88,9 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _build_messages(problem_statement: str, language: str = "en") -> list[dict[str, str]]:
+def _build_messages(
+    problem_statement: str, language: str = "en"
+) -> list[dict[str, str]]:
     sys_prompt = (
         "You are a software issue triage assistant. Return only valid JSON.\n"
         'Format: {"analysis":{"root_cause_hypothesis":"...","risk":"low|medium|high"},'
@@ -116,10 +117,12 @@ def _score_plan(payload: dict[str, Any] | None) -> tuple[bool, bool, bool, str |
     has_analysis = isinstance(analysis, dict) and bool(
         str(analysis.get("root_cause_hypothesis", "")).strip()
     )
-    has_files = isinstance(files, list) and len([f for f in files if str(f).strip()]) >= 1
-    has_actions = isinstance(actions, list) and len(
-        [a for a in actions if str(a).strip()]
-    ) >= 1
+    has_files = (
+        isinstance(files, list) and len([f for f in files if str(f).strip()]) >= 1
+    )
+    has_actions = (
+        isinstance(actions, list) and len([a for a in actions if str(a).strip()]) >= 1
+    )
     if has_analysis and has_files and has_actions:
         return True, True, True, None
     if not has_analysis:

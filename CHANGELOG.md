@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.5 - 2026-05-03
+
+- Updated release metadata, README install guidance, and PyPI-facing project description for the current local-first Ollama workflow.
+- Removed committed local `.env` values from the repository and kept `.env.example` as the only environment template.
+- Added GitHub Actions CI with compile, ruff lint/format, pytest, and package build checks.
+- Added focused smoke/unit tests for deterministic tool calls, environment loading, path safety, and tool faithfulness scoring.
+- Normalized Python formatting with ruff across package, examples, and scripts.
+- Refreshed examples to use `.env`/CLI settings instead of hard-coded LM Studio model names, with fast default showcase behavior and optional slower scenarios.
+- Improved tool support scoring so numeric and path-like tool outputs are credited correctly in faithfulness diagnostics.
+
 ## 0.2.0 - 2026-04-01
 
 - Added OpenAI-native tool calling mode, streaming decision support, and per-step token accounting across traces and reports.

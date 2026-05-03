@@ -1,55 +1,73 @@
+from __future__ import annotations
+
+import argparse
 from pathlib import Path
+
+from explainable_agent.agent import ExplainableAgent
 from explainable_agent.config import Settings
 from explainable_agent.openai_client import OpenAICompatClient
-from explainable_agent.agent import ExplainableAgent
+from explainable_agent.report import write_run_artifacts
 from explainable_agent.tools import define_tool
 
-# ==========================================
-# 1. Define a Custom Tool
-# ==========================================
-# Use the @define_tool decorator to easily add new capabilities to your agent.
-# The agent will automatically detect it and parse its description and usage hints.
 
 @define_tool(
     name="get_weather_info",
-    description="Fetches current weather information for a specific city.",
-    usage_hint="Input is just the city name, e.g., Tokyo or London"
+    description="Returns mocked weather information for a city.",
+    usage_hint="Input is just the city name, e.g. Istanbul or Tokyo.",
 )
 def get_weather_info(city: str, _: Path) -> str:
-    # In a real-world scenario, you would make an API call (e.g. OpenWeatherMap)
-    # Here, we just mock a database.
     weather_db = {
-        "tokyo": "Sunny, 22°C",
-        "london": "Rainy, 14°C",
-        "new york": "Cloudy, 16°C",
-        "istanbul": "Clear, 25°C"
+        "istanbul": "Clear, 25 C",
+        "london": "Rainy, 14 C",
+        "new york": "Cloudy, 16 C",
+        "tokyo": "Sunny, 22 C",
     }
-    
-    city_lower = city.lower().strip()
-    result = weather_db.get(city_lower)
-    
+    city_name = city.strip()
+    result = weather_db.get(city_name.lower())
     if result:
-        return f"The weather in {city} is currently {result}."
-    else:
-        # Intentionally raising an error to demonstrate the agent's self-healing capabilities!
-        return f"ERROR: Weather information not found for city '{city}'. Please try another city."
+        return f"The weather in {city_name} is currently {result}."
+    return f"ERROR: Weather information not found for city '{city_name}'."
 
-# ==========================================
-# 2. Run the Agent
-# ==========================================
-def main():
-    settings = Settings.from_env()
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Run a custom tool example.")
+    parser.add_argument("--city", default="Istanbul", help="City for the custom tool.")
+    parser.add_argument("--base-url", default=None, help="OpenAI-compatible base URL.")
+    parser.add_argument("--api-key", default=None, help="API key for the endpoint.")
+    parser.add_argument("--model", default=None, help="Model name.")
+    parser.add_argument("--max-steps", type=int, default=3, help="Maximum agent steps.")
+    parser.add_argument(
+        "--json-mode",
+        action="store_true",
+        help="Use JSON decision mode instead of native function calling.",
+    )
+    parser.add_argument(
+        "--verbose", action="store_true", help="Print rich step panels."
+    )
+    return parser.parse_args()
+
+
+def main() -> int:
+    args = parse_args()
+    settings = Settings.from_env().with_overrides(
+        base_url=args.base_url,
+        api_key=args.api_key,
+        requested_model=args.model,
+        max_steps=args.max_steps,
+        use_native_tools=not args.json_mode,
+    )
     client = OpenAICompatClient(base_url=settings.base_url, api_key=settings.api_key)
-    
-    # Enable verbose to track how the agent uses the custom tool
-    agent = ExplainableAgent(settings=settings, client=client, verbose=True)
-    
-    # Let's give the agent a task that requires our new custom tool
-    task = "get_weather_info: Istanbul"
-    print(f"\n[Starting Task] {task}\n")
-    
-    trace = agent.run(task)
-    print("\nFinal Answer:", trace.final_answer)
+    agent = ExplainableAgent(settings=settings, client=client, verbose=args.verbose)
+
+    trace = agent.run(f"get_weather_info: {args.city}")
+    trace_path, report_path = write_run_artifacts(trace, settings.runs_dir)
+
+    print("Final answer:")
+    print(trace.final_answer)
+    print(f"Trace: {trace_path}")
+    print(f"Report: {report_path}")
+    return 0
+
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

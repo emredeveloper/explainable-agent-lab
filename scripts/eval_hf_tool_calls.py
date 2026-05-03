@@ -33,7 +33,12 @@ except Exception:  # noqa: BLE001
     repair_json = None
 
 try:
-    from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
+    from tenacity import (
+        retry,
+        retry_if_exception_type,
+        stop_after_attempt,
+        wait_exponential,
+    )
 except Exception:  # noqa: BLE001
     retry = None
     retry_if_exception_type = None
@@ -53,7 +58,6 @@ from explainable_agent.eval_tool_calls import (
     score_prediction_variants,
 )
 from explainable_agent.json_utils import parse_json_object_relaxed
-
 
 DEFAULT_DATASET = Path("data/evals/hf_xlam_fc_sample.jsonl")
 
@@ -90,11 +94,11 @@ RESPONSE_SCHEMA = {
 
 
 if BaseModel is not None and ConfigDict is not None and Field is not None:
+
     class ToolCallModel(BaseModel):
         model_config = ConfigDict(extra="ignore")
         name: str
         arguments: dict[str, Any] = Field(default_factory=dict)
-
 
     class ToolCallResponseModel(BaseModel):
         model_config = ConfigDict(extra="ignore")
@@ -148,7 +152,7 @@ def parse_args() -> argparse.Namespace:
         type=str,
         choices=["en"],
         default="en",
-        help="Output language (en)."
+        help="Output language (en).",
     )
     parser.add_argument(
         "--limit",
@@ -353,11 +357,15 @@ def _normalize_schema_for_validator(schema: Any) -> dict[str, Any]:
     if isinstance(normalized, dict) and normalized.get("type") == "object":
         normalized.setdefault("properties", {})
         normalized.setdefault("additionalProperties", True)
-    return normalized if isinstance(normalized, dict) else {
-        "type": "object",
-        "properties": {},
-        "additionalProperties": True,
-    }
+    return (
+        normalized
+        if isinstance(normalized, dict)
+        else {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": True,
+        }
+    )
 
 
 def _build_schema_validator(schema: dict[str, Any]) -> Any:
@@ -479,7 +487,7 @@ def _normalize_argument_values(value: Any) -> Any:
         return [_normalize_argument_values(item) for item in value]
     if isinstance(value, str):
         cleaned = value.replace("\xa0", " ")
-        for bad in ("\u00C2", "\u00C3\u201A", "\u0100"):
+        for bad in ("\u00c2", "\u00c3\u201a", "\u0100"):
             cleaned = cleaned.replace(bad, "")
         return " ".join(cleaned.split())
     return value
@@ -598,7 +606,9 @@ def _deterministic_repair_tool_calls(
     if repair_json is not None:
         try:
             repaired_obj = repair_json(cleaned, return_objects=True)
-            repaired_calls, repaired_error = _parse_tool_calls_from_payload(repaired_obj)
+            repaired_calls, repaired_error = _parse_tool_calls_from_payload(
+                repaired_obj
+            )
             if not repaired_error and repaired_calls:
                 return repaired_calls, {
                     "applied": True,
@@ -812,7 +822,9 @@ def _build_car_rental_rule_calls(sample: dict[str, Any]) -> list[dict[str, Any]]
     if not locations:
         hint = _extract_query_hint(query, "query")
         locations = [hint] if hint else []
-    locations = [loc.strip() for loc in locations if isinstance(loc, str) and loc.strip()]
+    locations = [
+        loc.strip() for loc in locations if isinstance(loc, str) and loc.strip()
+    ]
     if not locations:
         return []
     return [{"name": loc_name, "arguments": {"query": loc}} for loc in locations]
@@ -873,8 +885,18 @@ def _extract_car_rental_args(query: str) -> dict[str, Any] | None:
 
 def _extract_first_datetime(text: str) -> datetime | None:
     month_map = {
-        "january": 1, "february": 2, "march": 3, "april": 4, "may": 5, "june": 6,
-        "july": 7, "august": 8, "september": 9, "october": 10, "november": 11, "december": 12,
+        "january": 1,
+        "february": 2,
+        "march": 3,
+        "april": 4,
+        "may": 5,
+        "june": 6,
+        "july": 7,
+        "august": 8,
+        "september": 9,
+        "october": 10,
+        "november": 11,
+        "december": 12,
     }
     date_match = re.search(
         r"\b(?:on\s+)?([A-Za-z]+)\s+(\d{1,2})(?:st|nd|rd|th)?(?:,\s*|\s+)(\d{4})",
@@ -905,7 +927,9 @@ def _extract_first_datetime(text: str) -> datetime | None:
 
 def _extract_dropoff_datetime(text: str, pickup_dt: datetime) -> datetime | None:
     day_delta_match = re.search(r"\b(\d+)\s+days?\s+later\b", text, flags=re.IGNORECASE)
-    hour_delta_match = re.search(r"\b(\d+)\s+hours?\s+later\b", text, flags=re.IGNORECASE)
+    hour_delta_match = re.search(
+        r"\b(\d+)\s+hours?\s+later\b", text, flags=re.IGNORECASE
+    )
     if day_delta_match:
         return pickup_dt + timedelta(days=int(day_delta_match.group(1)))
     if hour_delta_match:
@@ -925,8 +949,18 @@ def _extract_dropoff_datetime(text: str, pickup_dt: datetime) -> datetime | None
 
 def _extract_second_date(text: str) -> datetime | None:
     month_map = {
-        "january": 1, "february": 2, "march": 3, "april": 4, "may": 5, "june": 6,
-        "july": 7, "august": 8, "september": 9, "october": 10, "november": 11, "december": 12,
+        "january": 1,
+        "february": 2,
+        "march": 3,
+        "april": 4,
+        "may": 5,
+        "june": 6,
+        "july": 7,
+        "august": 8,
+        "september": 9,
+        "october": 10,
+        "november": 11,
+        "december": 12,
     }
     matches = list(
         re.finditer(
@@ -947,10 +981,12 @@ def _extract_second_date(text: str) -> datetime | None:
         return None
 
 
-def _build_messages(sample: dict[str, Any], reasoning_effort: str, language: str = "en") -> list[dict[str, str]]:
+def _build_messages(
+    sample: dict[str, Any], reasoning_effort: str, language: str = "en"
+) -> list[dict[str, str]]:
     query = sample["query"]
     tools = sample["tools"]
-    
+
     sys_prompt = (
         "You are a tool-calling evaluator.\n"
         f"Reasoning effort: {reasoning_effort}.\n"
@@ -1046,7 +1082,9 @@ def main() -> int:
     fallback_injected_calls_total = 0
 
     for idx, sample in enumerate(samples):
-        messages = _build_messages(sample, reasoning_effort=reasoning_effort, language=args.language)
+        messages = _build_messages(
+            sample, reasoning_effort=reasoning_effort, language=args.language
+        )
         response = _request_completion(
             client=client,
             model=requested_model,
@@ -1057,10 +1095,13 @@ def main() -> int:
 
         raw_output = _response_content(response)
         predicted_calls, parse_error = _parse_tool_calls_from_text(raw_output)
-        local_repair_meta: dict[str, int | bool] = {"applied": False, "recovered_calls": 0}
+        local_repair_meta: dict[str, int | bool] = {
+            "applied": False,
+            "recovered_calls": 0,
+        }
         if parse_error or not predicted_calls:
-            repaired_locally_calls, local_repair_meta = _deterministic_repair_tool_calls(
-                raw_output
+            repaired_locally_calls, local_repair_meta = (
+                _deterministic_repair_tool_calls(raw_output)
             )
             if repaired_locally_calls:
                 predicted_calls = repaired_locally_calls
@@ -1114,8 +1155,8 @@ def main() -> int:
                     "recovered_calls": 0,
                 }
                 if repaired_parse_error or not repaired_calls:
-                    repaired_calls, repaired_local_meta = _deterministic_repair_tool_calls(
-                        repaired_output
+                    repaired_calls, repaired_local_meta = (
+                        _deterministic_repair_tool_calls(repaired_output)
                     )
                     repaired_parse_error = not repaired_calls
                 if bool(repaired_local_meta.get("applied")):
@@ -1133,7 +1174,9 @@ def main() -> int:
                     calls=repaired_calls,
                     max_tool_calls=args.max_tool_calls,
                 )
-                repaired_guard_meta["dropped_by_max_tool_calls"] = repaired_dropped_by_max
+                repaired_guard_meta["dropped_by_max_tool_calls"] = (
+                    repaired_dropped_by_max
+                )
 
                 if not repaired_parse_error and repaired_calls:
                     raw_output = repaired_output
@@ -1252,7 +1295,8 @@ def main() -> int:
             "name_match_accuracy": round(name_match_total / total, 4),
             "call_count_accuracy": round(call_count_match_total / total, 4),
             "argument_match_rate": round(
-                (arg_match_total / expected_call_total) if expected_call_total else 0.0, 4
+                (arg_match_total / expected_call_total) if expected_call_total else 0.0,
+                4,
             ),
         },
         failure_patterns=failure_patterns,
@@ -1348,9 +1392,7 @@ def _build_report(summary: dict[str, Any], results: list[dict[str, Any]]) -> str
     lines.append(f"- Sampling: `{summary.get('sampling')}`")
     lines.append(f"- Seed: `{summary.get('seed')}`")
     lines.append(f"- Max tool calls: `{summary.get('max_tool_calls')}`")
-    lines.append(
-        f"- Max completion tokens: `{summary.get('max_completion_tokens')}`"
-    )
+    lines.append(f"- Max completion tokens: `{summary.get('max_completion_tokens')}`")
     if summary.get("answer_path"):
         lines.append(f"- Ground truth: `{summary['answer_path']}`")
     lines.append(f"- Sample count: `{summary['sample_count']}`")
@@ -1409,7 +1451,9 @@ def _build_report(summary: dict[str, Any], results: list[dict[str, Any]]) -> str
     repair = summary.get("repair", {})
     guard = summary.get("guard", {})
     if repair:
-        lines.append(f"- Attempted repair samples: `{repair.get('attempted_samples', 0)}`")
+        lines.append(
+            f"- Attempted repair samples: `{repair.get('attempted_samples', 0)}`"
+        )
         lines.append(f"- Successful repairs: `{repair.get('successful_repairs', 0)}`")
         lines.append(
             f"- Max attempts per sample: `{repair.get('max_attempts_per_sample', 0)}`"
@@ -1544,9 +1588,7 @@ def _build_actionable_plan(
     if failure_patterns:
         top = failure_patterns[0]
         top_error = str(top.get("error_type", "unknown"))
-        pattern_action = (
-            f"En sik pattern `{top_error}`: bu pattern icin hedefli 10 orneklik mini regression seti olusturup her degisiklikte otomatik kos."
-        )
+        pattern_action = f"En sik pattern `{top_error}`: bu pattern icin hedefli 10 orneklik mini regression seti olusturup her degisiklikte otomatik kos."
 
     if int(guard_metrics.get("schema_validation_errors", 0)) > 0:
         actions.append(

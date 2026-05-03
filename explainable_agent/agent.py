@@ -1,10 +1,14 @@
 from __future__ import annotations
 
-import re
 import random
+import re
 from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
+
+from rich.console import Console
+from rich.panel import Panel
+from rich.text import Text
 
 from .config import Settings
 from .openai_client import OpenAICompatClient
@@ -17,10 +21,6 @@ from .tools import (
     tools_without_input,
 )
 
-from rich.console import Console
-from rich.panel import Panel
-from rich.text import Text
-
 console = Console()
 
 
@@ -29,11 +29,7 @@ def _utc_now() -> str:
 
 
 def _tokenize(text: str) -> set[str]:
-    return {
-        token.strip(".,:;!?()[]{}\"'").lower()
-        for token in text.split()
-        if token.strip(".,:;!?()[]{}\"'")
-    }
+    return set(re.findall(r"[a-z0-9_]+", text.lower()))
 
 
 def lexical_jaccard_similarity(text_a: str, text_b: str) -> float:
@@ -71,11 +67,7 @@ STOPWORDS = {
 
 def _content_tokens(text: str) -> set[str]:
     tokens = _tokenize(text)
-    return {
-        tok
-        for tok in tokens
-        if len(tok) >= 3 and tok not in STOPWORDS and not tok.isdigit()
-    }
+    return {tok for tok in tokens if len(tok) >= 2 and tok not in STOPWORDS}
 
 
 def tool_support_score(answer: str, steps: list[StepTrace]) -> float:
@@ -211,7 +203,7 @@ def _is_low_quality_answer(answer: str) -> bool:
     text = answer.strip().lower().strip(".!?,;:")
     if not text:
         return True
-    if text.startswith("{") and ("\"action\"" in text or "'action'" in text):
+    if text.startswith("{") and ('"action"' in text or "'action'" in text):
         return True
     if text in {"final_answer", "tool_call"}:
         return True
@@ -296,19 +288,28 @@ def _build_step_audit(
 
 def _analyze_efficiency(steps: list[StepTrace]) -> list[str]:
     diagnostics: list[str] = []
-    
+
     if len(steps) >= 5:
-        diagnostics.append(f"Analysis: It took the agent {len(steps)} steps to reach a conclusion. Complex multi-step paths increase the risk of hallucination. Consider breaking down the task or creating higher-level tools.")
-        
+        diagnostics.append(
+            f"Analysis: It took the agent {len(steps)} steps to reach a conclusion. Complex multi-step paths increase the risk of hallucination. Consider breaking down the task or creating higher-level tools."
+        )
+
     for step in steps:
         if step.tool_output_length > 4000:
-            diagnostics.append(f"Warning: The output from '{step.decision.tool_name}' at Step {step.step} was extremely long ({step.tool_output_length} characters). This may overwhelm the model's context window and degrade performance. Consider adding a tool that filters or summarizes this data.")
-            
+            diagnostics.append(
+                f"Warning: The output from '{step.decision.tool_name}' at Step {step.step} was extremely long ({step.tool_output_length} characters). This may overwhelm the model's context window and degrade performance. Consider adding a tool that filters or summarizes this data."
+            )
+
     return diagnostics
 
 
 class ExplainableAgent:
-    def __init__(self, settings: Settings, client: OpenAICompatClient | None = None, verbose: bool = False) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        client: OpenAICompatClient | None = None,
+        verbose: bool = False,
+    ) -> None:
         self.settings = settings
         self.client = client or OpenAICompatClient(
             base_url=settings.base_url, api_key=settings.api_key
@@ -321,7 +322,7 @@ class ExplainableAgent:
                 "ERROR: [Chaos Mode] TIMEOUT: The external service did not respond in time.",
                 "ERROR: [Chaos Mode] MALFORMED_DATA: Received unreadable garbage instead of JSON.",
                 "ERROR: [Chaos Mode] PERMISSION_DENIED: Agent lacks the required role to run this tool.",
-                "ERROR: [Chaos Mode] RATE_LIMIT: Too many requests, please retry later or use another tool."
+                "ERROR: [Chaos Mode] RATE_LIMIT: Too many requests, please retry later or use another tool.",
             ]
             return random.choice(chaos_errors)
 
@@ -544,7 +545,9 @@ class ExplainableAgent:
             latency_ms=0,
             usage=None,
             decision_source="explicit_request",
-            decision_notes=["LLM step skipped because explicit tool name found in task."],
+            decision_notes=[
+                "LLM step skipped because explicit tool name found in task."
+            ],
             why_tool="Tool name explicitly mentioned in user text.",
         )
         messages.append(
@@ -626,10 +629,10 @@ class ExplainableAgent:
         # Developer: decision source and latency
         if audit is not None:
             source = audit.get("source", "model")
-            content.append(f"Source: ", style="bold dim")
+            content.append("Source: ", style="bold dim")
             content.append(f"{source}", style="dim")
             if latency_ms is not None:
-                content.append(f"  |  Latency: ", style="bold dim")
+                content.append("  |  Latency: ", style="bold dim")
                 content.append(f"{latency_ms} ms\n", style="dim")
             else:
                 content.append("\n")
@@ -639,31 +642,39 @@ class ExplainableAgent:
         elif latency_ms is not None:
             content.append(f"Latency: {latency_ms} ms\n", style="dim")
 
-        content.append(f"Rationale: ", style="bold")
+        content.append("Rationale: ", style="bold")
         content.append(f"{decision.rationale}\n")
 
-        conf_color = "red" if decision.confidence < 0.5 else "yellow" if decision.confidence < 0.8 else "green"
-        content.append(f"Confidence: ", style="bold")
+        conf_color = (
+            "red"
+            if decision.confidence < 0.5
+            else "yellow"
+            if decision.confidence < 0.8
+            else "green"
+        )
+        content.append("Confidence: ", style="bold")
         content.append(f"{decision.confidence:.2f}\n", style=conf_color)
 
         if decision.action == "tool_call":
-            content.append(f"Tool: ", style="bold")
+            content.append("Tool: ", style="bold")
             content.append(f"{decision.tool_name}\n", style="magenta")
-            content.append(f"Input: ", style="bold")
+            content.append("Input: ", style="bold")
             content.append(f"{decision.tool_input}\n")
             if tool_output:
-                out_preview = tool_output[:300] + "..." if len(tool_output) > 300 else tool_output
-                content.append(f"Output: ", style="bold")
+                out_preview = (
+                    tool_output[:300] + "..." if len(tool_output) > 300 else tool_output
+                )
+                content.append("Output: ", style="bold")
                 content.append(f"{out_preview}\n", style="dim")
         else:
-            content.append(f"Final Answer: ", style="bold")
+            content.append("Final Answer: ", style="bold")
             content.append(f"{decision.answer}\n", style="bold white")
 
         if decision.error_analysis:
-            content.append(f"\nError Analysis: ", style="bold red")
+            content.append("\nError Analysis: ", style="bold red")
             content.append(f"{decision.error_analysis}\n")
         if decision.proposed_fix:
-            content.append(f"Proposed Fix: ", style="bold yellow")
+            content.append("Proposed Fix: ", style="bold yellow")
             content.append(f"{decision.proposed_fix}\n")
 
         panel = Panel(
@@ -679,7 +690,8 @@ class ExplainableAgent:
         steps = trace.steps
         n = len(steps)
         self_healed = sum(
-            1 for s in steps
+            1
+            for s in steps
             if s.decision.error_analysis and s.decision.action == "tool_call"
         )
 
@@ -691,7 +703,9 @@ class ExplainableAgent:
             for s in steps:
                 if s.decision.action == "tool_call":
                     err = "ERROR:" in (s.tool_output or "")
-                    parts.append(f"Step {s.step} {s.decision.tool_name} {'[FAIL]' if err else '[OK]'}")
+                    parts.append(
+                        f"Step {s.step} {s.decision.tool_name} {'[FAIL]' if err else '[OK]'}"
+                    )
                 else:
                     parts.append(f"Step {s.step} final_answer")
             content.append(" -> ".join(parts) + "\n")
@@ -701,7 +715,9 @@ class ExplainableAgent:
                 total_prompt = sum(s.prompt_tokens for s in steps)
                 total_completion = sum(s.completion_tokens for s in steps)
                 content.append("Tokens: ", style="bold")
-                content.append(f"prompt={total_prompt}, completion={total_completion}, total={total_tokens}\n")
+                content.append(
+                    f"prompt={total_prompt}, completion={total_completion}, total={total_tokens}\n"
+                )
             if trace.errors:
                 content.append("Errors / auto-fixes: ", style="bold yellow")
                 content.append("; ".join(trace.errors) + "\n")
@@ -725,12 +741,18 @@ class ExplainableAgent:
             for s in steps:
                 if s.decision.action == "tool_call":
                     err = "ERROR:" in (s.tool_output or "")
-                    line_parts.append(f"Step {s.step}: {s.decision.tool_name} {'[FAIL]' if err else '[OK]'}")
+                    line_parts.append(
+                        f"Step {s.step}: {s.decision.tool_name} {'[FAIL]' if err else '[OK]'}"
+                    )
                 else:
                     line_parts.append(f"Step {s.step}: final_answer")
             one_line = " -> ".join(line_parts)
 
-            console.print(f"Run complete: [bold]{n} steps[/]" + (f" ([yellow]{self_healed} self-healed[/])" if self_healed else "") + ".")
+            console.print(
+                f"Run complete: [bold]{n} steps[/]"
+                + (f" ([yellow]{self_healed} self-healed[/])" if self_healed else "")
+                + "."
+            )
             console.print(f"Flow: {one_line}")
             answer_preview = (trace.final_answer or "")[:200]
             if len(trace.final_answer or "") > 200:
@@ -738,12 +760,15 @@ class ExplainableAgent:
             console.print(f"Answer: {answer_preview}")
             if trace.errors or trace.efficiency_diagnostics:
                 warnings = trace.errors + trace.efficiency_diagnostics
-                console.print(f"[yellow]Warnings:[/] {'; '.join(warnings[:3])}" + (" ..." if len(warnings) > 3 else ""))
+                console.print(
+                    f"[yellow]Warnings:[/] {'; '.join(warnings[:3])}"
+                    + (" ..." if len(warnings) > 3 else "")
+                )
 
     def run(self, task: str) -> RunTrace:
-        run_id = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S") + "_" + uuid4().hex[
-            :8
-        ]
+        run_id = (
+            datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S") + "_" + uuid4().hex[:8]
+        )
         started_at = _utc_now()
         resolved_model = self.client.resolve_model(self.settings.requested_model)
 
@@ -755,7 +780,9 @@ class ExplainableAgent:
         steps: list[StepTrace] = []
         errors: list[str] = []
         final_answer = ""
-        loop_start = self._run_explicit_tool_step(task=task, messages=messages, steps=steps)
+        loop_start = self._run_explicit_tool_step(
+            task=task, messages=messages, steps=steps
+        )
 
         for step in range(loop_start, self.settings.max_steps + 1):
             decision, raw_output, latency_ms, usage = self._request_decision(
@@ -847,7 +874,7 @@ class ExplainableAgent:
                 )
 
         tool_used = any(step.decision.action == "tool_call" for step in steps)
-        
+
         if tool_used and _looks_generic_completion(final_answer):
             fallback = _fallback_answer_from_tool_outputs(steps)
             if fallback:
@@ -860,7 +887,9 @@ class ExplainableAgent:
                 fallback = _fallback_answer_from_tool_outputs(steps)
                 if fallback:
                     final_answer = fallback
-                    errors.append("Low quality final answer automatically corrected from tool result.")
+                    errors.append(
+                        "Low quality final answer automatically corrected from tool result."
+                    )
             elif not self._skip_expensive_quality_passes():
                 final_answer = self.client.get_alternative_answer(
                     model=resolved_model,
@@ -881,7 +910,9 @@ class ExplainableAgent:
             threshold = 0.75
             support_threshold = 0.25
             support_score = tool_support_score(final_answer, steps)
-            likely_faithful = similarity < threshold or support_score >= support_threshold
+            likely_faithful = (
+                similarity < threshold or support_score >= support_threshold
+            )
             note = (
                 "Strong tool trace (low alternative similarity or high tool overlap)."
                 if likely_faithful
@@ -894,9 +925,7 @@ class ExplainableAgent:
             support_threshold = 0.25
             support_score = tool_support_score(final_answer, steps)
             likely_faithful = support_score >= support_threshold
-            note = (
-                "Faithfulness estimated from tool overlap only to keep local-provider latency low."
-            )
+            note = "Faithfulness estimated from tool overlap only to keep local-provider latency low."
         else:
             alternative_answer = "(skipped check: tool not used)"
             similarity = 1.0
@@ -916,7 +945,7 @@ class ExplainableAgent:
             tool_support_score=support_score,
             support_threshold=support_threshold,
         )
-        
+
         diagnostics = _analyze_efficiency(steps)
 
         trace = RunTrace(

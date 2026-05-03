@@ -4,7 +4,6 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Literal
 
-
 ActionType = Literal["tool_call", "final_answer"]
 
 
@@ -102,6 +101,7 @@ class RunTrace:
             "efficiency_diagnostics": list(self.efficiency_diagnostics),
         }
 
+
 @dataclass
 class SubTaskTrace:
     agent_name: str
@@ -114,8 +114,9 @@ class SubTaskTrace:
             "agent_name": self.agent_name,
             "assigned_task": self.assigned_task,
             "orchestrator_rationale": self.orchestrator_rationale,
-            "trace": self.trace.to_dict()
+            "trace": self.trace.to_dict(),
         }
+
 
 @dataclass
 class OrchestratorRunTrace:
@@ -135,5 +136,5 @@ class OrchestratorRunTrace:
             "finished_at_utc": self.finished_at_utc,
             "subtasks": [st.to_dict() for st in self.subtasks],
             "final_synthesis": self.final_synthesis,
-            "diagnostics": list(self.diagnostics)
+            "diagnostics": list(self.diagnostics),
         }

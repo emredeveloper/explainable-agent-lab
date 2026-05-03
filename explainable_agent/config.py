@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 
@@ -34,15 +33,13 @@ class Settings:
         chaos_mode: bool | None = None,
         use_native_tools: bool | None = None,
         stream: bool | None = None,
-    ) -> "Settings":
+    ) -> Settings:
         return replace(
             self,
             base_url=base_url if base_url is not None else self.base_url,
             api_key=api_key if api_key is not None else self.api_key,
             requested_model=(
-                requested_model
-                if requested_model is not None
-                else self.requested_model
+                requested_model if requested_model is not None else self.requested_model
             ),
             reasoning_effort=(
                 reasoning_effort
@@ -56,12 +53,14 @@ class Settings:
             ),
             temperature=temperature if temperature is not None else self.temperature,
             chaos_mode=chaos_mode if chaos_mode is not None else self.chaos_mode,
-            use_native_tools=use_native_tools if use_native_tools is not None else self.use_native_tools,
+            use_native_tools=use_native_tools
+            if use_native_tools is not None
+            else self.use_native_tools,
             stream=stream if stream is not None else self.stream,
         )
 
     @classmethod
-    def from_env(cls) -> "Settings":
+    def from_env(cls) -> Settings:
         env_file = Path(".env")
         if env_file.exists():
             for line in env_file.read_text(encoding="utf-8").splitlines():

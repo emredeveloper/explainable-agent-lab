@@ -3,11 +3,11 @@ from __future__ import annotations
 import ast
 import os
 import sqlite3
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable
-
+from typing import Any
 
 ToolFn = Callable[[str, Path], str]
 TOOL_SCHEMA_VERSION = "tool-spec-v1"
@@ -28,26 +28,26 @@ class ToolSpec:
     fn: ToolFn
     requires_input: bool = True
 
+
 AVAILABLE_TOOLS: dict[str, ToolSpec] = {}
 
+
 def define_tool(
-    name: str,
-    description: str,
-    usage_hint: str,
-    requires_input: bool = True
+    name: str, description: str, usage_hint: str, requires_input: bool = True
 ) -> Callable[[ToolFn], ToolFn]:
     """Decorator to register a tool in the AVAILABLE_TOOLS catalog."""
+
     def decorator(fn: ToolFn) -> ToolFn:
         AVAILABLE_TOOLS[name] = ToolSpec(
             name=name,
             description=description,
             usage_hint=usage_hint,
             fn=fn,
-            requires_input=requires_input
+            requires_input=requires_input,
         )
         return fn
-    return decorator
 
+    return decorator
 
 
 def _safe_resolve_path(workspace_root: Path, input_path: str) -> Path:
@@ -63,7 +63,7 @@ def _safe_resolve_path(workspace_root: Path, input_path: str) -> Path:
 @define_tool(
     name="calculate_math",
     description="Calculates a basic arithmetic expression.",
-    usage_hint="Input is an expression string, e.g., (12.5*4)-7"
+    usage_hint="Input is an expression string, e.g., (12.5*4)-7",
 )
 def calculate_math(expression: str, _: Path) -> str:
     expression = expression.strip()
@@ -104,7 +104,7 @@ def calculate_math(expression: str, _: Path) -> str:
 @define_tool(
     name="read_text_file",
     description="Reads a UTF-8 text file from the workspace.",
-    usage_hint="Input is a relative file path, e.g., docs/notes.txt"
+    usage_hint="Input is a relative file path, e.g., docs/notes.txt",
 )
 def read_text_file(input_path: str, workspace_root: Path) -> str:
     try:
@@ -127,7 +127,7 @@ def read_text_file(input_path: str, workspace_root: Path) -> str:
 @define_tool(
     name="list_workspace_files",
     description="Lists files in the workspace directory.",
-    usage_hint="Input is '<path>|<glob>' (glob is optional), e.g., '.' or '.|*.py'"
+    usage_hint="Input is '<path>|<glob>' (glob is optional), e.g., '.' or '.|*.py'",
 )
 def list_workspace_files(input_path: str, workspace_root: Path) -> str:
     rel, pattern = _parse_list_input(input_path)
@@ -154,7 +154,9 @@ def list_workspace_files(input_path: str, workspace_root: Path) -> str:
     files = sorted(files)
     max_items = 100
     if len(files) > max_items:
-        shown = files[:max_items] + [f"...[truncated {len(files)-max_items} files]..."]
+        shown = files[:max_items] + [
+            f"...[truncated {len(files) - max_items} files]..."
+        ]
     else:
         shown = files
     return "\n".join(shown) if shown else "(empty)"
@@ -177,12 +179,10 @@ def _parse_list_input(raw_input: str) -> tuple[str, str]:
     name="now_utc",
     description="Returns current UTC time in ISO format.",
     usage_hint="Input can be empty.",
-    requires_input=False
+    requires_input=False,
 )
 def now_utc(_: str, __: Path) -> str:
     return datetime.now(timezone.utc).isoformat()
-
-
 
 
 def _resolve_sqlite_db_path(workspace_root: Path) -> Path:
@@ -201,7 +201,7 @@ def _resolve_sqlite_db_path(workspace_root: Path) -> Path:
     name="sqlite_init_demo",
     description="Creates a demo SQLite DB with sample customers/orders tables.",
     usage_hint="Input can be empty.",
-    requires_input=False
+    requires_input=False,
 )
 def sqlite_init_demo(_: str, workspace_root: Path) -> str:
     try:
@@ -256,7 +256,7 @@ def sqlite_init_demo(_: str, workspace_root: Path) -> str:
     name="sqlite_list_tables",
     description="Lists SQLite tables in the configured DB file.",
     usage_hint="Input can be empty.",
-    requires_input=False
+    requires_input=False,
 )
 def sqlite_list_tables(_: str, workspace_root: Path) -> str:
     try:
@@ -287,7 +287,7 @@ def sqlite_list_tables(_: str, workspace_root: Path) -> str:
 @define_tool(
     name="sqlite_describe_table",
     description="Shows the schema of an SQLite table.",
-    usage_hint="Input is the table name, e.g., customers"
+    usage_hint="Input is the table name, e.g., customers",
 )
 def sqlite_describe_table(table_name: str, workspace_root: Path) -> str:
     name = table_name.strip()
@@ -323,7 +323,7 @@ def sqlite_describe_table(table_name: str, workspace_root: Path) -> str:
 @define_tool(
     name="sqlite_query",
     description="Executes a read-only SQLite query (SELECT/PRAGMA/WITH/EXPLAIN).",
-    usage_hint="Input is an SQL query string."
+    usage_hint="Input is an SQL query string.",
 )
 def sqlite_query(query: str, workspace_root: Path) -> str:
     sql = query.strip()
@@ -373,7 +373,7 @@ def sqlite_query(query: str, workspace_root: Path) -> str:
 @define_tool(
     name="sqlite_execute",
     description="Executes SQLite write statements (CREATE/INSERT/UPDATE/DELETE).",
-    usage_hint="Input is an SQL script string."
+    usage_hint="Input is an SQL script string.",
 )
 def sqlite_execute(sql_script: str, workspace_root: Path) -> str:
     sql = sql_script.strip()
@@ -422,7 +422,7 @@ def _format_sql_cell(cell: object) -> str:
 @define_tool(
     name="duckduckgo_search",
     description="Performs real-time web search via DuckDuckGo.",
-    usage_hint="Input is the search query, e.g., Python 3.12 features"
+    usage_hint="Input is the search query, e.g., Python 3.12 features",
 )
 def duckduckgo_search(query: str, _: Path) -> str:
     query = query.strip()
@@ -442,21 +442,18 @@ def duckduckgo_search(query: str, _: Path) -> str:
 
     if not results:
         return "Not found."
-    
+
     lines = [f"Search Results ('{query}'):", ""]
     for i, res in enumerate(results, 1):
         lines.append(f"{i}. {res.get('title', 'No Title')}")
         lines.append(f"   URL: {res.get('href', 'No URL')}")
-        snippet = res.get('body', '')
+        snippet = res.get("body", "")
         if len(snippet) > 200:
             snippet = snippet[:197] + "..."
         lines.append(f"   Summary: {snippet}")
         lines.append("")
-    
+
     return "\n".join(lines)
-
-
-
 
 
 def openai_tool_definitions() -> list[dict[str, Any]]:
@@ -474,14 +471,16 @@ def openai_tool_definitions() -> list[dict[str, Any]]:
                 "description": spec.usage_hint,
             }
             params["required"] = ["input"]
-        defs.append({
-            "type": "function",
-            "function": {
-                "name": spec.name,
-                "description": spec.description,
-                "parameters": params,
-            },
-        })
+        defs.append(
+            {
+                "type": "function",
+                "function": {
+                    "name": spec.name,
+                    "description": spec.description,
+                    "parameters": params,
+                },
+            }
+        )
     return defs
 
 

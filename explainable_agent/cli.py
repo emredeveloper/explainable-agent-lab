@@ -117,7 +117,9 @@ def main() -> int:
     if args.max_steps is not None:
         settings = settings.with_overrides(max_steps=args.max_steps)
     if args.workspace:
-        settings = settings.with_overrides(workspace_root=Path(args.workspace).resolve())
+        settings = settings.with_overrides(
+            workspace_root=Path(args.workspace).resolve()
+        )
     if args.runs_dir:
         settings = settings.with_overrides(runs_dir=Path(args.runs_dir).resolve())
     if args.temperature is not None:

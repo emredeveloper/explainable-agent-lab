@@ -5,7 +5,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 PYTHON = sys.executable
 MODEL = "gpt-oss-20b"

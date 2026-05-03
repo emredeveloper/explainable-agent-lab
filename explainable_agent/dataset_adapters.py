@@ -7,7 +7,6 @@ from typing import Any, Literal
 
 from .eval_tool_calls import load_bfcl_sql_samples, load_eval_samples
 
-
 TaskType = Literal["tool_call", "swebench_patch"]
 
 
@@ -25,7 +24,10 @@ def resolve_dataset_format(dataset_path: Path, requested_format: str) -> str:
         sibling_answer = dataset_path.parent / "possible_answer" / "BFCL_v3_sql.json"
         if sibling_answer.exists():
             return "bfcl_sql"
-    if "swe-bench" in dataset_path.name.lower() or "swebench" in dataset_path.name.lower():
+    if (
+        "swe-bench" in dataset_path.name.lower()
+        or "swebench" in dataset_path.name.lower()
+    ):
         return "swebench_lite"
     return "jsonl"
 
@@ -45,7 +47,9 @@ def load_dataset_with_adapter(
             answer_path=answers_path,
             limit=limit,
         )
-        return AdapterOutput(dataset_format=dataset_format, task_type="tool_call", rows=rows)
+        return AdapterOutput(
+            dataset_format=dataset_format, task_type="tool_call", rows=rows
+        )
 
     if dataset_format == "swebench_lite":
         rows = load_swebench_lite_samples(dataset_path=dataset_path, limit=limit)
@@ -56,10 +60,14 @@ def load_dataset_with_adapter(
         )
 
     rows = load_eval_samples(dataset_path, limit=limit)
-    return AdapterOutput(dataset_format=dataset_format, task_type="tool_call", rows=rows)
+    return AdapterOutput(
+        dataset_format=dataset_format, task_type="tool_call", rows=rows
+    )
 
 
-def load_swebench_lite_samples(dataset_path: Path, limit: int | None = None) -> list[dict[str, Any]]:
+def load_swebench_lite_samples(
+    dataset_path: Path, limit: int | None = None
+) -> list[dict[str, Any]]:
     # Supports JSONL exports and JSON list exports of SWE-bench Lite-like rows.
     rows = _read_json_or_jsonl(dataset_path)
     normalized: list[dict[str, Any]] = []
