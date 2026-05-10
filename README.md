@@ -146,3 +146,5 @@ The agent comes with out-of-the-box tools ready to use:
 
 ---
 *License: MIT | Current Release: v0.2.5*
+
+<!-- profile-priority: current-ai-agent-project -->
