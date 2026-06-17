@@ -77,18 +77,22 @@ def write_orchestrator_artifacts(
         )
         lines.append("")
 
-    lines.append("## How to View SQL Results")
-    lines.append("")
-    lines.append("To query the database and see the inserted data, run:")
-    lines.append("```bash")
-    lines.append(
-        'explainable-agent --task "sqlite_query: SELECT * FROM ai_news" --verbose'
+    sqlite_used = any(
+        s.decision.tool_name and s.decision.tool_name.startswith("sqlite_")
+        for st in trace.subtasks
+        for s in st.trace.steps
     )
-    lines.append("```")
-    lines.append(
-        "(Or use `sqlite_query: SELECT * FROM customers` for the demo tables.)"
-    )
-    lines.append("")
+    if sqlite_used:
+        lines.append("## How to View SQL Results")
+        lines.append("")
+        lines.append("List available tables, then query the table you need:")
+        lines.append("```bash")
+        lines.append('explainable-agent --task "sqlite_list_tables:" --verbose')
+        lines.append(
+            'explainable-agent --task "sqlite_query: SELECT * FROM customers" --verbose'
+        )
+        lines.append("```")
+        lines.append("")
 
     lines.append("## Orchestrator Diagnostics & Improvement Suggestions")
     lines.append("")

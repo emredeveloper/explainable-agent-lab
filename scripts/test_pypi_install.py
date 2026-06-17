@@ -40,8 +40,8 @@ def main():
     import explainable_agent
 
     print(f"explainable-agent version: {explainable_agent.__version__}")
-    assert explainable_agent.__version__ == "0.2.5", (
-        f"Expected 0.2.5, got {explainable_agent.__version__}"
+    assert explainable_agent.__version__ == "0.3.0", (
+        f"Expected 0.3.0, got {explainable_agent.__version__}"
     )
 
     results = []

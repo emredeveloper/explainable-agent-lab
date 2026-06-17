@@ -7,11 +7,38 @@ from rich.console import Console
 from rich.panel import Panel
 
 from .agent import ExplainableAgent
-from .json_utils import parse_json_object_relaxed
 from .openai_client import OpenAICompatClient
 from .schemas import OrchestratorRunTrace, SubTaskTrace
 
 console = Console()
+
+ORCHESTRATOR_PLAN_SCHEMA = {
+    "type": "json_schema",
+    "json_schema": {
+        "name": "orchestrator_delegation_plan",
+        "schema": {
+            "type": "object",
+            "properties": {
+                "plan": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "agent_name": {"type": "string"},
+                            "assigned_task": {"type": "string"},
+                            "rationale": {"type": "string"},
+                        },
+                        "required": ["agent_name", "assigned_task", "rationale"],
+                        "additionalProperties": False,
+                    },
+                }
+            },
+            "required": ["plan"],
+            "additionalProperties": False,
+        },
+        "strict": True,
+    },
+}
 
 
 def _utc_now() -> str:
@@ -67,23 +94,20 @@ class TeamOrchestrator:
 
         resolved_model = self.client.resolve_model(requested_model)
 
-        # Request JSON format specifically
-        raw_output = self.client.get_alternative_answer(
+        payload, _raw_output, _latency_ms, _usage = self.client.get_json_object(
             model=resolved_model,
-            task=_messages_to_prompt(messages),
             temperature=0.0,
-            reasoning_effort="high",
+            messages=messages,
+            response_format=ORCHESTRATOR_PLAN_SCHEMA,
         )
 
-        payload, _ = parse_json_object_relaxed(raw_output)
         if (
             isinstance(payload, dict)
             and "plan" in payload
             and isinstance(payload["plan"], list)
         ):
-            return payload["plan"]
+            return _normalize_plan(payload["plan"], set(self.agents))
 
-        # Fallback if parsing fails entirely
         return []
 
     def _synthesize_final_answer(
@@ -211,12 +235,18 @@ class TeamOrchestrator:
                 )
             )
 
-        final_synthesis = self._synthesize_final_answer(
-            main_task, subtask_traces, requested_model
-        )
+        diagnostics = self._evaluate_orchestration(subtask_traces)
+        if subtask_traces:
+            final_synthesis = self._synthesize_final_answer(
+                main_task, subtask_traces, requested_model
+            )
+        else:
+            final_synthesis = (
+                "No sub-agent tasks were executed because the orchestrator did not "
+                "produce a valid delegation plan."
+            )
 
         finished_at = _utc_now()
-        diagnostics = self._evaluate_orchestration(subtask_traces)
 
         return OrchestratorRunTrace(
             run_id=run_id,
@@ -238,3 +268,25 @@ def _messages_to_prompt(messages: list[dict[str, str]]) -> str:
             lines.append(f"{role}:\n{content}")
     lines.append("ASSISTANT:")
     return "\n\n".join(lines)
+
+
+def _normalize_plan(
+    raw_plan: list[object], valid_agents: set[str]
+) -> list[dict[str, str]]:
+    normalized: list[dict[str, str]] = []
+    for item in raw_plan:
+        if not isinstance(item, dict):
+            continue
+        agent_name = str(item.get("agent_name", "")).strip()
+        assigned_task = str(item.get("assigned_task", "")).strip()
+        rationale = str(item.get("rationale", "")).strip()
+        if not agent_name or agent_name not in valid_agents or not assigned_task:
+            continue
+        normalized.append(
+            {
+                "agent_name": agent_name,
+                "assigned_task": assigned_task,
+                "rationale": rationale or "No rationale provided.",
+            }
+        )
+    return normalized

@@ -19,7 +19,8 @@ This document describes the high-level architecture of **Explainable Agent Lab**
 
 - `explainable_agent/tools.py`
   - Built-in tools and guards (file / SQLite / math / web).
-  - Tool registry (`define_tool`, `AVAILABLE_TOOLS`) and runtime execution helper.
+  - Tool registry APIs (`define_tool`, `ToolRegistry`, `AVAILABLE_TOOLS`) and runtime execution helper.
+  - `ToolRegistry` lets library users create isolated per-agent tool catalogs without mutating global process state.
 
 - `explainable_agent/report.py`
   - Run artifact writers:

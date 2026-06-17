@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import random
 import re
+from collections.abc import Mapping
 from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
@@ -14,6 +15,8 @@ from .config import Settings
 from .openai_client import OpenAICompatClient
 from .schemas import Decision, FaithfulnessCheck, RunTrace, StepTrace
 from .tools import (
+    ToolRegistry,
+    ToolSpec,
     available_tool_names,
     run_tool,
     tool_catalog_payload,
@@ -82,8 +85,17 @@ def tool_support_score(answer: str, steps: list[StepTrace]) -> float:
     return len(overlap) / len(answer_tokens)
 
 
-def _heuristic_tool_suggestion(task: str) -> tuple[str, str] | None:
-    explicit = _extract_explicit_tool_request(task)
+def _heuristic_tool_suggestion(
+    task: str,
+    *,
+    tool_names: set[str] | None = None,
+    tools_without_input_set: set[str] | None = None,
+) -> tuple[str, str] | None:
+    explicit = _extract_explicit_tool_request(
+        task,
+        tool_names=tool_names,
+        tools_without_input_set=tools_without_input_set,
+    )
     if explicit:
         return explicit
 
@@ -108,16 +120,32 @@ def _heuristic_tool_suggestion(task: str) -> tuple[str, str] | None:
     return None
 
 
-def _extract_explicit_tool_request(task: str) -> tuple[str, str] | None:
-    lower = task.lower()
-    known_tools = available_tool_names()
-    without_input = tools_without_input()
+def _extract_explicit_tool_request(
+    task: str,
+    *,
+    tool_names: set[str] | None = None,
+    tools_without_input_set: set[str] | None = None,
+) -> tuple[str, str] | None:
+    known_tools = tool_names or available_tool_names()
+    without_input = tools_without_input_set or tools_without_input()
+    tool_pattern = "|".join(
+        re.escape(tool) for tool in sorted(known_tools, key=len, reverse=True)
+    )
+    match = re.match(rf"(?is)^\s*/?(?P<tool>{tool_pattern})\s*:\s*(?P<input>.*)$", task)
+    if not match:
+        no_input_match = re.match(rf"(?is)^\s*/?(?P<tool>{tool_pattern})\s*$", task)
+        if no_input_match:
+            tool = no_input_match.group("tool").lower()
+            if tool in without_input:
+                return (tool, "")
+        return None
+
+    tool = match.group("tool").lower()
+    raw_input = match.group("input").strip()
+
     for tool in sorted(known_tools, key=len, reverse=True):
-        idx = lower.find(tool)
-        if idx == -1:
+        if tool != match.group("tool").lower():
             continue
-        raw_after = task[idx + len(tool) :]
-        raw_input = raw_after.lstrip(" :|-").strip()
 
         if tool in without_input:
             return (tool, "")
@@ -155,7 +183,7 @@ def _extract_math_expression(text: str) -> str | None:
 
 def _extract_sql_statement(text: str) -> str | None:
     match = re.search(
-        r"(?is)\b(select|with|pragma|insert|update|delete|create|drop|alter)\b.*",
+        r"(?is)\b(select|with|insert|update|delete|create|drop|alter)\b.*",
         text,
     )
     if not match:
@@ -168,7 +196,7 @@ def _extract_sql_statement(text: str) -> str | None:
 def _is_read_only_sql(sql: str) -> bool:
     first = sql.strip().split()
     token = first[0].lower() if first else ""
-    return token in {"select", "with", "pragma", "explain"}
+    return token in {"select", "with", "explain"}
 
 
 def _extract_glob_pattern(text: str) -> str | None:
@@ -199,7 +227,11 @@ def _should_override_first_tool(
     return current != suggested_tool_name
 
 
-def _is_low_quality_answer(answer: str) -> bool:
+def _is_low_quality_answer(
+    answer: str,
+    *,
+    tool_names: set[str] | None = None,
+) -> bool:
     text = answer.strip().lower().strip(".!?,;:")
     if not text:
         return True
@@ -207,7 +239,7 @@ def _is_low_quality_answer(answer: str) -> bool:
         return True
     if text in {"final_answer", "tool_call"}:
         return True
-    if text in available_tool_names():
+    if text in (tool_names or available_tool_names()):
         return True
     return len(text) <= 2
 
@@ -309,12 +341,19 @@ class ExplainableAgent:
         settings: Settings,
         client: OpenAICompatClient | None = None,
         verbose: bool = False,
+        tool_registry: Mapping[str, ToolSpec] | ToolRegistry | None = None,
     ) -> None:
         self.settings = settings
         self.client = client or OpenAICompatClient(
             base_url=settings.base_url, api_key=settings.api_key
         )
         self.verbose = verbose
+        if isinstance(tool_registry, ToolRegistry):
+            self.tool_registry = dict(tool_registry.specs)
+        elif tool_registry is not None:
+            self.tool_registry = dict(tool_registry)
+        else:
+            self.tool_registry = dict(ToolRegistry.from_global().specs)
 
     def _execute_tool(self, tool_name: str, tool_input: str) -> str:
         if self.settings.chaos_mode and random.random() < 0.2:
@@ -330,6 +369,7 @@ class ExplainableAgent:
             tool_name=tool_name,
             tool_input=tool_input,
             workspace_root=self.settings.workspace_root,
+            registry=self.tool_registry,
         )
 
     def _skip_expensive_quality_passes(self) -> bool:
@@ -344,8 +384,8 @@ class ExplainableAgent:
                 "role": "user",
                 "content": (
                     f"User task:\n{task}\n\n"
-                    f"Available tools:\n{tool_catalog_text()}\n\n"
-                    f"Tool catalog JSON:\n{tool_catalog_payload()}\n\n"
+                    f"Available tools:\n{tool_catalog_text(self.tool_registry)}\n\n"
+                    f"Tool catalog JSON:\n{tool_catalog_payload(self.tool_registry)}\n\n"
                     "Select only one tool per step if necessary."
                 ),
             }
@@ -363,6 +403,7 @@ class ExplainableAgent:
                 messages=messages,
                 temperature=self.settings.temperature,
                 reasoning_effort=self.settings.reasoning_effort,
+                tool_registry=self.tool_registry,
             )
         if self.settings.stream:
             stream_tokens: list[str] = []
@@ -467,7 +508,15 @@ class ExplainableAgent:
     ) -> tuple[Decision, str, str, list[str]]:
         decision_source = "model"
         decision_notes: list[str] = []
-        suggestion = _heuristic_tool_suggestion(task) if not steps else None
+        suggestion = (
+            _heuristic_tool_suggestion(
+                task,
+                tool_names=available_tool_names(self.tool_registry),
+                tools_without_input_set=tools_without_input(self.tool_registry),
+            )
+            if not steps
+            else None
+        )
 
         if suggestion and decision.action == "tool_call":
             tool_name, tool_input = suggestion
@@ -519,7 +568,11 @@ class ExplainableAgent:
         messages: list[dict[str, str]],
         steps: list[StepTrace],
     ) -> int:
-        explicit_tool_request = _extract_explicit_tool_request(task)
+        explicit_tool_request = _extract_explicit_tool_request(
+            task,
+            tool_names=available_tool_names(self.tool_registry),
+            tools_without_input_set=tools_without_input(self.tool_registry),
+        )
         if not explicit_tool_request:
             return 1
 
@@ -584,7 +637,7 @@ class ExplainableAgent:
         resolved_model: str,
     ) -> None:
         """Print developer-oriented flow roadmap when verbose=True."""
-        tools_list = ", ".join(available_tool_names())
+        tools_list = ", ".join(available_tool_names(self.tool_registry))
         flow = (
             "Task -> [LLM Decision JSON] -> tool_call? -> execute tool -> append to context -> repeat\n"
             "                          -> final_answer? -> done (or max_steps)"
@@ -882,7 +935,9 @@ class ExplainableAgent:
                 errors.append(
                     "Generic/invalid final answer automatically corrected from tool result."
                 )
-        if _is_low_quality_answer(final_answer):
+        if _is_low_quality_answer(
+            final_answer, tool_names=available_tool_names(self.tool_registry)
+        ):
             if tool_used:
                 fallback = _fallback_answer_from_tool_outputs(steps)
                 if fallback:

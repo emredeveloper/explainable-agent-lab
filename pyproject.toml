@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "explainable-agent"
-version = "0.2.5"
+version = "0.3.0"
 description = "A local-first, explainable AI agent framework with self-healing, detailed error diagnostics, and interactive tool-calling traces."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -39,6 +39,9 @@ explainable-agent = "explainable_agent.cli:main"
 
 [tool.setuptools.packages.find]
 include = ["explainable_agent*"]
+
+[tool.setuptools.package-data]
+explainable_agent = ["py.typed"]
 
 [tool.ruff]
 line-length = 88

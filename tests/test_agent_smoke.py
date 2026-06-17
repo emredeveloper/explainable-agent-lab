@@ -43,6 +43,21 @@ def test_explicit_math_request_runs_without_llm(tmp_path):
     assert trace.steps[0].decision.tool_name == "calculate_math"
 
 
+def test_tool_name_mention_does_not_skip_llm(tmp_path):
+    settings = Settings.from_env().with_overrides(
+        requested_model="qwen3.5:9b",
+        runs_dir=tmp_path / "runs",
+        workspace_root=tmp_path,
+        max_steps=1,
+    )
+
+    agent = ExplainableAgent(settings=settings, client=FakeClient(), verbose=False)
+    trace = agent.run("What does the calculate_math tool do?")
+
+    assert trace.steps[0].audit["source"] == "model"
+    assert trace.steps[0].decision.tool_name is None
+
+
 def test_tool_support_score_matches_numeric_and_path_outputs():
     steps = [
         StepTrace(

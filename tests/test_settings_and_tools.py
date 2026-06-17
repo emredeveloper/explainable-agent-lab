@@ -42,3 +42,35 @@ def test_file_tool_cannot_escape_workspace(tmp_path):
 
     assert result.startswith("ERROR:")
     assert "escapes workspace" in result
+
+
+def test_sqlite_query_rejects_pragma(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGENT_SQLITE_DB", "data/test_agent.db")
+    assert run_tool("sqlite_init_demo", "", tmp_path).startswith("OK:")
+
+    result = run_tool("sqlite_query", "PRAGMA user_version", tmp_path)
+
+    assert result.startswith("ERROR:")
+    assert "read-only queries" in result
+
+
+def test_sqlite_query_allows_select(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGENT_SQLITE_DB", "data/test_agent.db")
+    assert run_tool("sqlite_init_demo", "", tmp_path).startswith("OK:")
+
+    result = run_tool(
+        "sqlite_query", "SELECT name FROM customers ORDER BY id", tmp_path
+    )
+
+    assert "COLUMNS: name" in result
+    assert "Acme Corp" in result
+
+
+def test_sqlite_execute_rejects_destructive_schema_changes(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGENT_SQLITE_DB", "data/test_agent.db")
+    assert run_tool("sqlite_init_demo", "", tmp_path).startswith("OK:")
+
+    result = run_tool("sqlite_execute", "DROP TABLE customers", tmp_path)
+
+    assert result.startswith("ERROR:")
+    assert "CREATE/INSERT/UPDATE/DELETE" in result

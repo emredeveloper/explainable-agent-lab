@@ -59,7 +59,7 @@ from explainable_agent.eval_tool_calls import (
 )
 from explainable_agent.json_utils import parse_json_object_relaxed
 
-DEFAULT_DATASET = Path("data/evals/hf_xlam_fc_sample.jsonl")
+DEFAULT_DATASET = Path("data/evals/hf_complexfuncbench_first_turn_100.jsonl")
 
 
 RESPONSE_SCHEMA = {

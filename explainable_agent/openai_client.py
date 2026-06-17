@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 import json
-import re
 import time
 from typing import Any
 
 from openai import OpenAI
 
+from .json_utils import parse_json_object_relaxed
 from .schemas import Decision
-from .tools import openai_tool_definitions
+from .tools import ToolRegistry, ToolSpec, openai_tool_definitions
 
 DECISION_SCHEMA = {
     "type": "json_schema",
@@ -117,6 +117,7 @@ class OpenAICompatClient:
         messages: list[dict[str, str]],
         temperature: float,
         reasoning_effort: str,
+        tool_registry: dict[str, ToolSpec] | ToolRegistry | None = None,
     ) -> tuple[Decision, str, int, dict[str, int]]:
         """Use OpenAI native function calling (tools parameter).
         Falls back to JSON parsing if the model doesn't return tool_calls."""
@@ -129,7 +130,7 @@ class OpenAICompatClient:
                     self._build_native_system_prompt(reasoning_effort), messages
                 ),
                 temperature=temperature,
-                tools=openai_tool_definitions(),
+                tools=openai_tool_definitions(tool_registry),
                 tool_choice="auto",
             )
         except Exception:  # noqa: BLE001
@@ -252,6 +253,33 @@ Provide clear reasoning in your responses."""
         )
         return (response.choices[0].message.content or "").strip()
 
+    def get_json_object(
+        self,
+        model: str,
+        messages: list[dict[str, str]],
+        temperature: float,
+        response_format: dict[str, Any] | None = None,
+    ) -> tuple[dict[str, Any], str, int, dict[str, int]]:
+        kwargs: dict[str, Any] = {}
+        if response_format is not None and not self._provider_prefers_plain_decisions():
+            kwargs["response_format"] = response_format
+        try:
+            response, latency_ms = self._create_chat_completion(
+                model=model,
+                messages=messages,
+                temperature=temperature,
+                **kwargs,
+            )
+        except Exception:  # noqa: BLE001
+            response, latency_ms = self._create_chat_completion(
+                model=model,
+                messages=messages,
+                temperature=temperature,
+            )
+        content = response.choices[0].message.content or ""
+        payload = self._parse_json_payload(content)
+        return payload, content, latency_ms, self._extract_usage(response)
+
     def _parse_decision_response(
         self, response: Any, latency_ms: int
     ) -> tuple[Decision, str, int, dict[str, int]]:
@@ -330,68 +358,8 @@ The response should be short, clear, and in English."""
 
     @staticmethod
     def _parse_json_payload(content: str) -> dict[str, Any]:
-        content = content.strip()
-        if not content:
-            return {}
-
-        # Remove markdown code block fences if present (e.g. ```json ... ```)
-        if content.startswith("```"):
-            lines = content.splitlines()
-            if len(lines) >= 2:
-                # Remove the first line (```json) and the last line (```)
-                content = "\n".join(lines[1:-1]).strip()
-
-        try:
-            data = json.loads(content)
-            if isinstance(data, dict):
-                return data
-        except json.JSONDecodeError:
-            pass
-
-        candidate = OpenAICompatClient._extract_first_json_object(content)
-        if candidate:
-            try:
-                data = json.loads(candidate)
-                if isinstance(data, dict):
-                    return data
-            except json.JSONDecodeError:
-                # Fallback to relax parsing for LLMs if standard fails
-                pass
-
-        try:
-            from json_repair import repair_json
-
-            repaired = repair_json(content, return_objects=True)
-            if isinstance(repaired, dict):
-                return repaired
-
-            if candidate:
-                repaired_candidate = repair_json(candidate, return_objects=True)
-                if isinstance(repaired_candidate, dict):
-                    return repaired_candidate
-        except ImportError:
-            pass
-        except Exception:
-            pass
-
-        return {}
-
-    @staticmethod
-    def _extract_first_json_object(text: str) -> str | None:
-        stack = 0
-        start = -1
-        for idx, char in enumerate(text):
-            if char == "{":
-                if stack == 0:
-                    start = idx
-                stack += 1
-            elif char == "}":
-                if stack > 0:
-                    stack -= 1
-                    if stack == 0 and start != -1:
-                        return text[start : idx + 1]
-        match = re.search(r"\{.*\}", text, flags=re.DOTALL)
-        return match.group(0) if match else None
+        payload, _method = parse_json_object_relaxed(content)
+        return payload or {}
 
     @staticmethod
     def _to_decision(payload: dict[str, Any], fallback_text: str) -> Decision:

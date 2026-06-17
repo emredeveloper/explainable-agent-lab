@@ -3,8 +3,8 @@ from __future__ import annotations
 import ast
 import os
 import sqlite3
-from collections.abc import Callable
-from dataclasses import dataclass
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -27,6 +27,50 @@ class ToolSpec:
     usage_hint: str
     fn: ToolFn
     requires_input: bool = True
+
+
+@dataclass
+class ToolRegistry:
+    specs: dict[str, ToolSpec] = field(default_factory=dict)
+
+    @classmethod
+    def from_global(cls) -> ToolRegistry:
+        return cls(specs=dict(AVAILABLE_TOOLS))
+
+    def define_tool(
+        self, name: str, description: str, usage_hint: str, requires_input: bool = True
+    ) -> Callable[[ToolFn], ToolFn]:
+        def decorator(fn: ToolFn) -> ToolFn:
+            self.specs[name] = ToolSpec(
+                name=name,
+                description=description,
+                usage_hint=usage_hint,
+                fn=fn,
+                requires_input=requires_input,
+            )
+            return fn
+
+        return decorator
+
+    def run(self, tool_name: str, tool_input: str, workspace_root: Path) -> str:
+        return run_tool(
+            tool_name=tool_name,
+            tool_input=tool_input,
+            workspace_root=workspace_root,
+            registry=self.specs,
+        )
+
+    def names(self) -> set[str]:
+        return available_tool_names(self.specs)
+
+    def without_input(self) -> set[str]:
+        return tools_without_input(self.specs)
+
+    def catalog_text(self) -> str:
+        return tool_catalog_text(self.specs)
+
+    def catalog_payload(self) -> dict[str, Any]:
+        return tool_catalog_payload(self.specs)
 
 
 AVAILABLE_TOOLS: dict[str, ToolSpec] = {}
@@ -322,7 +366,7 @@ def sqlite_describe_table(table_name: str, workspace_root: Path) -> str:
 
 @define_tool(
     name="sqlite_query",
-    description="Executes a read-only SQLite query (SELECT/PRAGMA/WITH/EXPLAIN).",
+    description="Executes a read-only SQLite query (SELECT/WITH/EXPLAIN).",
     usage_hint="Input is an SQL query string.",
 )
 def sqlite_query(query: str, workspace_root: Path) -> str:
@@ -330,7 +374,9 @@ def sqlite_query(query: str, workspace_root: Path) -> str:
     if not sql:
         return "ERROR: SQL query is empty."
     if not _is_read_only_sql(sql):
-        return "ERROR: sqlite_query only supports read-only queries (SELECT/PRAGMA/WITH/EXPLAIN)."
+        return (
+            "ERROR: sqlite_query only supports read-only queries (SELECT/WITH/EXPLAIN)."
+        )
 
     try:
         db_path = _resolve_sqlite_db_path(workspace_root)
@@ -344,7 +390,7 @@ def sqlite_query(query: str, workspace_root: Path) -> str:
 
     max_rows = 50
     try:
-        with sqlite3.connect(db_path) as conn:
+        with _connect_sqlite_read_only(db_path) as conn:
             cursor = conn.cursor()
             cursor.execute(sql)
             rows = cursor.fetchmany(max_rows + 1)
@@ -382,6 +428,8 @@ def sqlite_execute(sql_script: str, workspace_root: Path) -> str:
     if _is_read_only_sql(sql):
         return "ERROR: Use sqlite_query for read-only SQL."
     first_token = _first_sql_token(sql)
+    if first_token not in {"create", "insert", "update", "delete"}:
+        return "ERROR: sqlite_execute only supports CREATE/INSERT/UPDATE/DELETE statements."
     if first_token in {"attach", "detach"}:
         return "ERROR: ATTACH/DETACH are not supported."
 
@@ -407,7 +455,25 @@ def _first_sql_token(sql: str) -> str:
 
 
 def _is_read_only_sql(sql: str) -> bool:
-    return _first_sql_token(sql) in {"select", "pragma", "with", "explain"}
+    return _first_sql_token(sql) in {"select", "with", "explain"}
+
+
+def _connect_sqlite_read_only(db_path: Path) -> sqlite3.Connection:
+    conn = sqlite3.connect(f"file:{db_path.as_posix()}?mode=ro", uri=True)
+    allowed_actions = {
+        sqlite3.SQLITE_SELECT,
+        sqlite3.SQLITE_READ,
+        sqlite3.SQLITE_FUNCTION,
+        sqlite3.SQLITE_RECURSIVE,
+    }
+
+    def _authorizer(action: int, *_args: object) -> int:
+        if action in allowed_actions:
+            return sqlite3.SQLITE_OK
+        return sqlite3.SQLITE_DENY
+
+    conn.set_authorizer(_authorizer)
+    return conn
 
 
 def _is_safe_sql_identifier(name: str) -> bool:
@@ -456,10 +522,12 @@ def duckduckgo_search(query: str, _: Path) -> str:
     return "\n".join(lines)
 
 
-def openai_tool_definitions() -> list[dict[str, Any]]:
+def openai_tool_definitions(
+    registry: Mapping[str, ToolSpec] | ToolRegistry | None = None,
+) -> list[dict[str, Any]]:
     """Build OpenAI-compatible tool definitions for native function calling."""
     defs: list[dict[str, Any]] = []
-    for spec in AVAILABLE_TOOLS.values():
+    for spec in _coerce_registry(registry).values():
         params: dict[str, Any] = {
             "type": "object",
             "properties": {},
@@ -484,15 +552,29 @@ def openai_tool_definitions() -> list[dict[str, Any]]:
     return defs
 
 
-def tool_catalog_text() -> str:
+def _coerce_registry(
+    registry: Mapping[str, ToolSpec] | ToolRegistry | None = None,
+) -> Mapping[str, ToolSpec]:
+    if isinstance(registry, ToolRegistry):
+        return registry.specs
+    return registry or AVAILABLE_TOOLS
+
+
+def tool_catalog_text(
+    registry: Mapping[str, ToolSpec] | ToolRegistry | None = None,
+) -> str:
+    specs = _coerce_registry(registry)
     lines: list[str] = []
     lines.append(f"[schema_version={TOOL_SCHEMA_VERSION}]")
-    for spec in AVAILABLE_TOOLS.values():
+    for spec in specs.values():
         lines.append(f"- {spec.name}: {spec.description} ({spec.usage_hint})")
     return "\n".join(lines)
 
 
-def tool_catalog_payload() -> dict[str, Any]:
+def tool_catalog_payload(
+    registry: Mapping[str, ToolSpec] | ToolRegistry | None = None,
+) -> dict[str, Any]:
+    specs = _coerce_registry(registry)
     return {
         "schema_version": TOOL_SCHEMA_VERSION,
         "tools": [
@@ -502,21 +584,34 @@ def tool_catalog_payload() -> dict[str, Any]:
                 "usage_hint": spec.usage_hint,
                 "requires_input": spec.requires_input,
             }
-            for spec in AVAILABLE_TOOLS.values()
+            for spec in specs.values()
         ],
     }
 
 
-def available_tool_names() -> set[str]:
-    return set(AVAILABLE_TOOLS.keys())
+def available_tool_names(
+    registry: Mapping[str, ToolSpec] | ToolRegistry | None = None,
+) -> set[str]:
+    return set(_coerce_registry(registry).keys())
 
 
-def tools_without_input() -> set[str]:
-    return {name for name, spec in AVAILABLE_TOOLS.items() if not spec.requires_input}
+def tools_without_input(
+    registry: Mapping[str, ToolSpec] | ToolRegistry | None = None,
+) -> set[str]:
+    return {
+        name
+        for name, spec in _coerce_registry(registry).items()
+        if not spec.requires_input
+    }
 
 
-def run_tool(tool_name: str, tool_input: str, workspace_root: Path) -> str:
-    spec = AVAILABLE_TOOLS.get(tool_name)
+def run_tool(
+    tool_name: str,
+    tool_input: str,
+    workspace_root: Path,
+    registry: Mapping[str, ToolSpec] | ToolRegistry | None = None,
+) -> str:
+    spec = _coerce_registry(registry).get(tool_name)
     if not spec:
         return f"ERROR: unknown tool '{tool_name}'."
     return spec.fn(tool_input or "", workspace_root)

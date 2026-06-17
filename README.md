@@ -23,9 +23,9 @@ Install directly from PyPI:
 pip install explainable-agent
 ```
 
-PyPI currently publishes `0.2.5` (released May 3, 2026). If PyPI is behind a future GitHub release, install the repository version instead:
+PyPI currently publishes `0.3.0` (released June 17, 2026). If PyPI is behind a future GitHub release, install the repository version instead:
 ```bash
-pip install "git+https://github.com/emredeveloper/explainable-agent-lab.git@v0.2.5"
+pip install "git+https://github.com/emredeveloper/explainable-agent-lab.git@v0.3.0"
 ```
 
 For development, clone the repo and run:
@@ -62,7 +62,71 @@ explainable-agent \
 
 ## 💻 Using the Python API
 
-Easily integrate the agent into your codebase or create custom tools using the `@define_tool` decorator.
+Easily integrate the agent into your codebase and inspect structured traces.
+
+```python
+from explainable_agent import ExplainableAgent, Settings, write_run_artifacts
+
+settings = Settings.from_env().with_overrides(
+    base_url="http://localhost:1234/v1",
+    api_key="local",
+    requested_model="google/gemma-4-e4b",
+)
+
+agent = ExplainableAgent(settings=settings, verbose=False)
+trace = agent.run("calculate_math: (215*4)-12")
+
+print(trace.final_answer)
+write_run_artifacts(trace, settings.runs_dir)
+```
+
+### Custom tools
+
+For simple applications, register a global tool with `@define_tool`:
+
+```python
+from pathlib import Path
+
+from explainable_agent import define_tool
+
+
+@define_tool(
+    name="echo_upper",
+    description="Converts text to uppercase.",
+    usage_hint="Input is plain text.",
+)
+def echo_upper(text: str, workspace_root: Path) -> str:
+    return text.upper()
+```
+
+For libraries, tests, and multi-tenant applications, prefer an isolated `ToolRegistry`
+so tool registrations do not leak across agent instances:
+
+```python
+from pathlib import Path
+
+from explainable_agent import ExplainableAgent, Settings, ToolRegistry
+
+registry = ToolRegistry.from_global()
+
+
+@registry.define_tool(
+    name="echo_upper",
+    description="Converts text to uppercase.",
+    usage_hint="Input is plain text.",
+)
+def echo_upper(text: str, workspace_root: Path) -> str:
+    return text.upper()
+
+
+agent = ExplainableAgent(
+    settings=Settings.from_env(),
+    tool_registry=registry,
+)
+```
+
+The stable public API exports `ExplainableAgent`, `Settings`, `ToolRegistry`,
+`ToolSpec`, `define_tool`, `run_tool`, trace dataclasses, and artifact writers.
 
 Check out the `examples/` directory:
 - [`examples/basic_usage.py`](examples/basic_usage.py) - Small default smoke run using `.env`/CLI settings.
@@ -145,6 +209,6 @@ The agent comes with out-of-the-box tools ready to use:
 `duckduckgo_search` remains the tool name in the API, while the underlying search dependency is provided by `ddgs`.
 
 ---
-*License: MIT | Current Release: v0.2.5*
+*License: MIT | Current Release: v0.3.0*
 
 <!-- profile-priority: current-ai-agent-project -->

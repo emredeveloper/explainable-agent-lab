@@ -1,8 +1,34 @@
-"""Explainable local agent MVP."""
+"""Public API for the explainable-agent package."""
 
 from .agent import ExplainableAgent
 from .config import Settings
+from .report import write_orchestrator_artifacts, write_run_artifacts
+from .schemas import (
+    Decision,
+    FaithfulnessCheck,
+    OrchestratorRunTrace,
+    RunTrace,
+    StepTrace,
+    SubTaskTrace,
+)
+from .tools import ToolRegistry, ToolSpec, define_tool, run_tool
 
-__version__ = "0.2.5"
+__version__ = "0.3.0"
 
-__all__ = ["ExplainableAgent", "Settings", "__version__"]
+__all__ = [
+    "Decision",
+    "ExplainableAgent",
+    "FaithfulnessCheck",
+    "OrchestratorRunTrace",
+    "RunTrace",
+    "Settings",
+    "StepTrace",
+    "SubTaskTrace",
+    "ToolRegistry",
+    "ToolSpec",
+    "__version__",
+    "define_tool",
+    "run_tool",
+    "write_orchestrator_artifacts",
+    "write_run_artifacts",
+]
