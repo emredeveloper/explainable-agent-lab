@@ -4,7 +4,7 @@ import json
 import time
 from typing import Any
 
-from openai import OpenAI
+from openai import APIConnectionError, OpenAI
 
 from .json_utils import parse_json_object_relaxed
 from .schemas import Decision
@@ -49,13 +49,35 @@ DECISION_SCHEMA = {
 }
 
 
+class LLMConnectionError(RuntimeError):
+    """Raised when the OpenAI-compatible server cannot be reached.
+
+    Carries setup guidance because an unreachable local server is the most
+    common failure for this package, and the underlying SDK only reports
+    "Connection error." without saying which URL was tried.
+    """
+
+
 class OpenAICompatClient:
     def __init__(self, base_url: str, api_key: str) -> None:
         self.base_url = base_url.rstrip("/")
         self.client = OpenAI(base_url=base_url, api_key=api_key)
 
+    def _connection_error(self, exc: Exception) -> LLMConnectionError:
+        return LLMConnectionError(
+            f"Cannot reach the LLM server at {self.base_url}\n"
+            "  - Is your local server (Ollama / LM Studio) running?\n"
+            "  - Ollama usually listens on http://localhost:11434/v1\n"
+            "  - LM Studio usually listens on http://localhost:1234/v1\n"
+            "  - Override the address with --base-url or OPENAI_BASE_URL\n"
+            f"  (original error: {exc})"
+        )
+
     def list_models(self) -> list[str]:
-        models = self.client.models.list()
+        try:
+            models = self.client.models.list()
+        except APIConnectionError as exc:
+            raise self._connection_error(exc) from exc
         return [m.id for m in models.data]
 
     def resolve_model(self, requested_model: str) -> str:
@@ -101,6 +123,8 @@ class OpenAICompatClient:
                 temperature=temperature,
                 response_format=DECISION_SCHEMA,
             )
+        except LLMConnectionError:
+            raise
         except Exception:  # noqa: BLE001
             response, latency_ms = self._create_chat_completion(
                 model=model,
@@ -133,6 +157,8 @@ class OpenAICompatClient:
                 tools=openai_tool_definitions(tool_registry),
                 tool_choice="auto",
             )
+        except LLMConnectionError:
+            raise
         except Exception:  # noqa: BLE001
             return self.get_decision(model, messages, temperature, reasoning_effort)
 
@@ -208,6 +234,8 @@ class OpenAICompatClient:
                     chunks.append(delta.content)
                     if on_token:
                         on_token(delta.content)
+        except LLMConnectionError:
+            raise
         except Exception:  # noqa: BLE001
             return self.get_decision(model, messages, temperature, reasoning_effort)
 
@@ -270,6 +298,8 @@ Provide clear reasoning in your responses."""
                 temperature=temperature,
                 **kwargs,
             )
+        except LLMConnectionError:
+            raise
         except Exception:  # noqa: BLE001
             response, latency_ms = self._create_chat_completion(
                 model=model,
@@ -298,12 +328,15 @@ Provide clear reasoning in your responses."""
         **kwargs: Any,
     ) -> tuple[Any, int]:
         started = time.perf_counter()
-        response = self.client.chat.completions.create(
-            model=model,
-            messages=messages,
-            temperature=temperature,
-            **kwargs,
-        )
+        try:
+            response = self.client.chat.completions.create(
+                model=model,
+                messages=messages,
+                temperature=temperature,
+                **kwargs,
+            )
+        except APIConnectionError as exc:
+            raise self._connection_error(exc) from exc
         latency_ms = int((time.perf_counter() - started) * 1000)
         return response, latency_ms
 

@@ -2,6 +2,7 @@
 
 from .agent import ExplainableAgent
 from .config import Settings
+from .openai_client import LLMConnectionError
 from .report import write_orchestrator_artifacts, write_run_artifacts
 from .schemas import (
     Decision,
@@ -19,6 +20,7 @@ __all__ = [
     "Decision",
     "ExplainableAgent",
     "FaithfulnessCheck",
+    "LLMConnectionError",
     "OrchestratorRunTrace",
     "RunTrace",
     "Settings",
