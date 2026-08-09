@@ -77,6 +77,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="Sampling temperature (default: AGENT_TEMPERATURE or 0.2).",
     )
     parser.add_argument(
+        "--request-timeout",
+        type=float,
+        default=None,
+        help="Per-request timeout in seconds (default: AGENT_REQUEST_TIMEOUT or 120).",
+    )
+    parser.add_argument(
+        "--max-retries",
+        type=int,
+        default=None,
+        help="Retries for transient API failures (default: AGENT_MAX_RETRIES or 2).",
+    )
+    parser.add_argument(
         "--verbose",
         action="store_true",
         help="Print steps to terminal with colors.",
@@ -124,6 +136,10 @@ def main() -> int:
         settings = settings.with_overrides(runs_dir=Path(args.runs_dir).resolve())
     if args.temperature is not None:
         settings = settings.with_overrides(temperature=args.temperature)
+    if args.request_timeout is not None:
+        settings = settings.with_overrides(request_timeout=args.request_timeout)
+    if args.max_retries is not None:
+        settings = settings.with_overrides(max_retries=args.max_retries)
     if args.chaos:
         settings = settings.with_overrides(chaos_mode=True)
     if args.native_tools:
@@ -131,7 +147,12 @@ def main() -> int:
     if args.stream:
         settings = settings.with_overrides(stream=True)
 
-    client = OpenAICompatClient(base_url=settings.base_url, api_key=settings.api_key)
+    client = OpenAICompatClient(
+        base_url=settings.base_url,
+        api_key=settings.api_key,
+        timeout=settings.request_timeout,
+        max_retries=settings.max_retries,
+    )
 
     if args.list_models:
         try:

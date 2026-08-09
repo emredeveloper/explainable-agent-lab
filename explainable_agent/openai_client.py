@@ -59,9 +59,20 @@ class LLMConnectionError(RuntimeError):
 
 
 class OpenAICompatClient:
-    def __init__(self, base_url: str, api_key: str) -> None:
+    def __init__(
+        self,
+        base_url: str,
+        api_key: str,
+        timeout: float | None = None,
+        max_retries: int | None = None,
+    ) -> None:
         self.base_url = base_url.rstrip("/")
-        self.client = OpenAI(base_url=base_url, api_key=api_key)
+        options: dict[str, Any] = {"base_url": base_url, "api_key": api_key}
+        if timeout is not None:
+            options["timeout"] = timeout
+        if max_retries is not None:
+            options["max_retries"] = max_retries
+        self.client = OpenAI(**options)
 
     def _connection_error(self, exc: Exception) -> LLMConnectionError:
         return LLMConnectionError(

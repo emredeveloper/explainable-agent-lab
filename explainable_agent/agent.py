@@ -466,7 +466,10 @@ class ExplainableAgent:
     ) -> None:
         self.settings = settings
         self.client = client or OpenAICompatClient(
-            base_url=settings.base_url, api_key=settings.api_key
+            base_url=settings.base_url,
+            api_key=settings.api_key,
+            timeout=settings.request_timeout,
+            max_retries=settings.max_retries,
         )
         self.verbose = verbose
         if isinstance(tool_registry, ToolRegistry):

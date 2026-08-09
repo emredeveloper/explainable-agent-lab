@@ -18,6 +18,10 @@ class Settings:
     chaos_mode: bool
     use_native_tools: bool = False
     stream: bool = False
+    # Local models can be slow, so the default is generous rather than the
+    # SDK's 600s, which looks like a hang. Retries cover transient blips only.
+    request_timeout: float = 120.0
+    max_retries: int = 2
 
     def with_overrides(
         self,
@@ -33,6 +37,8 @@ class Settings:
         chaos_mode: bool | None = None,
         use_native_tools: bool | None = None,
         stream: bool | None = None,
+        request_timeout: float | None = None,
+        max_retries: int | None = None,
     ) -> Settings:
         return replace(
             self,
@@ -57,6 +63,10 @@ class Settings:
             if use_native_tools is not None
             else self.use_native_tools,
             stream=stream if stream is not None else self.stream,
+            request_timeout=(
+                request_timeout if request_timeout is not None else self.request_timeout
+            ),
+            max_retries=max_retries if max_retries is not None else self.max_retries,
         )
 
     @classmethod
@@ -85,6 +95,8 @@ class Settings:
             chaos_mode=_env_bool("AGENT_CHAOS_MODE"),
             use_native_tools=_env_bool("AGENT_NATIVE_TOOLS"),
             stream=_env_bool("AGENT_STREAM"),
+            request_timeout=_env_float("AGENT_REQUEST_TIMEOUT", 120.0),
+            max_retries=_env_int("AGENT_MAX_RETRIES", 2),
         )
 
 
