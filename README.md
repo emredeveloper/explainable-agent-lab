@@ -23,9 +23,9 @@ Install directly from PyPI:
 pip install explainable-agent
 ```
 
-PyPI currently publishes `0.3.0` (released June 17, 2026). If PyPI is behind a future GitHub release, install the repository version instead:
+PyPI currently publishes `0.3.1` (released August 9, 2026). If PyPI is behind a future GitHub release, install the repository version instead:
 ```bash
-pip install "git+https://github.com/emredeveloper/explainable-agent-lab.git@v0.3.0"
+pip install "git+https://github.com/emredeveloper/explainable-agent-lab.git@v0.3.1"
 ```
 
 For development, clone the repo and run:
@@ -209,6 +209,6 @@ The agent comes with out-of-the-box tools ready to use:
 `duckduckgo_search` remains the tool name in the API, while the underlying search dependency is provided by `ddgs`.
 
 ---
-*License: MIT | Current Release: v0.3.0*
+*License: MIT | Current Release: v0.3.1*
 
 <!-- profile-priority: current-ai-agent-project -->

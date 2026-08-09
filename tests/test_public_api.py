@@ -38,7 +38,7 @@ class FakeClient:
 
 
 def test_public_api_exports_library_surface():
-    assert explainable_agent.__version__ == "0.3.0"
+    assert explainable_agent.__version__ == "0.3.1"
     assert Decision is not None
     assert ExplainableAgent is not None
     assert Settings is not None

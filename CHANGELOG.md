@@ -1,5 +1,45 @@
 # Changelog
 
+## 0.3.1 - 2026-08-09
+
+### Fixed
+
+- **Security: `sqlite_execute` guard bypass.** The tool validated only the first
+  SQL token but executed the script with `executescript()`, so a chained
+  statement such as `INSERT ...; DROP TABLE customers;` ran unchecked. Every
+  statement is now validated against the CREATE/INSERT/UPDATE/DELETE allowlist,
+  using a splitter that ignores semicolons inside string literals and comments.
+- **First-step heuristics hijacked ordinary prose.** Dates, version numbers and
+  ranges were parsed as arithmetic — "Summarize the report for Q1-2026" was
+  silently answered with `-2025.0` — and English sentences containing SQL verbs
+  ("select the best option") were routed to SQLite. Math detection now requires
+  an operator between two operands plus a valid AST parse, and SQL detection
+  requires real clause structure (`SELECT ... FROM`, `INSERT INTO`, ...).
+- **File-path detection matched version strings.** "version 3.10-rc1" resolved to
+  the path `3.10`; a candidate now needs a directory separator or a known file
+  extension.
+- **Report writing crashed on mixed timestamps.** `_duration_ms` raised
+  `TypeError` when one timestamp was timezone-naive; both are now normalized to
+  UTC before subtraction.
+- **`.env` values kept their quotes.** `OPENAI_API_KEY="key"` was sent to the
+  server including the quote characters. Values are now unquoted and stripped,
+  `export FOO=bar` lines are supported, and invalid numeric values raise an error
+  naming the offending variable instead of a bare `ValueError`.
+- **CI could not run tests on a fresh checkout.** `pytest --basetemp=.tmp/pytest`
+  failed because the git-ignored `.tmp/` parent did not exist.
+
+### Removed
+
+- Dead `_messages_to_prompt` helper in `orchestrator.py` and an unreachable
+  ATTACH/DETACH branch in `sqlite_execute`.
+
+### Internal
+
+- Translated the remaining Turkish comments, console output and eval report
+  strings to English; annotated the Turkish stopword sets that are functional
+  data rather than prose.
+- Added `tests/test_bugfix_regressions.py` covering each fix above.
+
 ## 0.3.0 - 2026-06-17
 
 - Promoted the package API for library use: exported trace dataclasses, tool helpers, tool registry, and artifact writers from `explainable_agent`.
