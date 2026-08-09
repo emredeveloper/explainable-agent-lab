@@ -11,6 +11,8 @@ from typing import Any
 
 ToolFn = Callable[[str, Path], str]
 TOOL_SCHEMA_VERSION = "tool-spec-v1"
+SEARCH_TIMEOUT_SECONDS = 10
+SEARCH_MAX_RESULTS = 5
 READ_ONLY_SQL_STATEMENTS = {"select", "with", "explain"}
 ALLOWED_WRITE_STATEMENTS = {"create", "insert", "update", "delete"}
 IGNORED_DIRS = {
@@ -589,8 +591,13 @@ def duckduckgo_search(query: str, _: Path) -> str:
             from ddgs import DDGS
         except ImportError:
             from duckduckgo_search import DDGS
-        ddgs = DDGS()
-        results = list(ddgs.text(query, max_results=5))
+        # Bound the network call so a stalled search cannot hang the agent.
+        # Older duckduckgo-search builds may not accept the keyword.
+        try:
+            ddgs = DDGS(timeout=SEARCH_TIMEOUT_SECONDS)
+        except TypeError:
+            ddgs = DDGS()
+        results = list(ddgs.text(query, max_results=SEARCH_MAX_RESULTS))
     except ImportError:
         return "ERROR: ddgs or duckduckgo-search package is not installed. Run: pip install ddgs"
     except Exception as exc:
