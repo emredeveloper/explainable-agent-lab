@@ -63,6 +63,35 @@ explainable-agent \
   --verbose
 ```
 
+**CLI options**
+
+| Flag | Description |
+|------|-------------|
+| `--task` | Task text for the agent (required unless `--list-models`). |
+| `--base-url` | OpenAI-compatible endpoint, e.g. `http://localhost:11434/v1`. |
+| `--model` | Model ID. Partial names resolve against the loaded models. |
+| `--api-key` | API key (default `local`; local servers usually ignore it). |
+| `--list-models` | List the models the server currently has loaded, then exit. |
+| `--max-steps` | Maximum agent steps before falling back to an answer (default `6`). |
+| `--temperature` | Sampling temperature (default `0.2`). |
+| `--reasoning-effort` | `low`, `medium`, or `high` (default `high`). |
+| `--verbose` | Rich step panels, decision sources, and a developer summary. |
+| `--chaos` | Chaos mode: inject random tool errors to exercise self-healing. |
+| `--native-tools` | Use the provider's native function-calling API instead of JSON. |
+| `--stream` | Stream decision tokens as they arrive. |
+| `--request-timeout` | Per-request timeout in seconds (default `120`). |
+| `--max-retries` | Retries for transient API failures (default `2`). |
+| `--workspace` | Root directory the file tools are allowed to touch. |
+| `--runs-dir` | Where traces and reports are written (default `runs/`). |
+| `--sqlite-db` | SQLite file path, relative to the workspace. |
+
+Every flag has an environment variable equivalent — see [`.env.example`](.env.example).
+
+**Stress-test self-healing with chaos mode:**
+```bash
+explainable-agent --task "sqlite_init_demo:" --chaos --verbose
+```
+
 ---
 
 ## 💻 Using the Python API
