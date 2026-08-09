@@ -16,18 +16,26 @@ keywords = ["agent", "llm", "tool-calling", "evaluation", "xai", "self-healing"]
 dependencies = [
   "openai>=1.54.0",
   "json-repair>=0.30.3",
-  "tenacity>=8.2.3",
-  "pydantic>=2.9.0",
   "ddgs>=0.1.0",
   "rich>=13.0.0"
 ]
 
 [project.optional-dependencies]
+# Only the benchmark scripts under scripts/ need these; they import them
+# defensively and degrade when absent.
+eval = [
+  "tenacity>=8.2.3",
+  "pydantic>=2.9.0",
+  "jsonschema>=4.0.0"
+]
 dev = [
   "twine>=5.1.1",
   "build>=1.2.1",
   "pytest>=8.0.0",
-  "ruff>=0.6.0"
+  "ruff>=0.6.0",
+  "tenacity>=8.2.3",
+  "pydantic>=2.9.0",
+  "jsonschema>=4.0.0"
 ]
 
 [project.urls]

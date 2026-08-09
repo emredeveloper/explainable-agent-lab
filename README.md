@@ -28,6 +28,11 @@ PyPI currently publishes `0.3.1` (released August 9, 2026). If PyPI is behind a 
 pip install "git+https://github.com/emredeveloper/explainable-agent-lab.git@v0.3.1"
 ```
 
+To run the benchmark scripts under `scripts/`, install the `eval` extra:
+```bash
+pip install "explainable-agent[eval]"
+```
+
 For development, clone the repo and run:
 ```bash
 pip install -e ".[dev]"
