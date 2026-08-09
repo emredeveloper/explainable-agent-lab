@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import random
 import re
 from collections.abc import Mapping
@@ -46,13 +47,18 @@ def lexical_jaccard_similarity(text_a: str, text_b: str) -> float:
     return len(a & b) / len(union)
 
 
+# Filler words ignored when scoring how well an answer is supported by tool
+# output. Both Turkish and English entries are listed because tasks and model
+# responses are commonly written in either language.
 STOPWORDS = {
+    # Turkish
     "ve",
     "ile",
     "bir",
     "bu",
     "icin",
     "olarak",
+    # English
     "the",
     "and",
     "or",
@@ -170,27 +176,103 @@ def _extract_explicit_tool_request(
     return None
 
 
+# Dates (2026-01-05), versions (3.10.1) and ranges (Q1-2026) are made of digits
+# and hyphens, so a naive scan reads them as arithmetic. Reject them explicitly.
+_DATE_LIKE_RE = re.compile(r"\d{4}-\d{1,2}-\d{1,2}|\d{1,2}[./]\d{1,2}[./]\d{2,4}")
+_VERSION_LIKE_RE = re.compile(r"\d+\.\d+\.\d+")
+
+
 def _extract_math_expression(text: str) -> str | None:
+    if _DATE_LIKE_RE.search(text) or _VERSION_LIKE_RE.search(text):
+        return None
+
     candidates = re.findall(r"[0-9\.\s\+\-\*\/\(\)\^\%]{3,}", text)
     if not candidates:
         return None
     candidate = max(candidates, key=len).strip()
-    if not any(op in candidate for op in "+-*/^%"):
-        return None
     cleaned = re.sub(r"\s+", "", candidate)
-    return cleaned.replace("^", "**")
+    if not cleaned:
+        return None
+
+    # Require an operator that actually sits between two operands, so trailing or
+    # dangling symbols ("3.10-", "-2026") are not mistaken for an expression.
+    if not re.search(r"[0-9.)]\s*[\+\-\*\/\^\%]\s*[0-9.(]", cleaned):
+        return None
+
+    # A bare "N-M" is far more often a range or identifier fragment (Q1-2026,
+    # pages 10-20) than a subtraction the user wants evaluated. Only trust it
+    # when the surrounding text shows real arithmetic intent.
+    if re.fullmatch(r"\d+-\d+", cleaned) and not _has_arithmetic_context(text):
+        return None
+
+    normalized = cleaned.replace("^", "**")
+    if not _is_valid_math_expression(normalized):
+        return None
+    return normalized
+
+
+def _has_arithmetic_context(text: str) -> bool:
+    return bool(
+        re.search(
+            r"(?i)\b(calculate|compute|evaluate|solve|sum|subtract|minus|plus|"
+            r"multiply|divide|result|hesapla|topla|cikar|carp|bol)\b",
+            text,
+        )
+    )
+
+
+def _is_valid_math_expression(expression: str) -> bool:
+    """Confirm the candidate parses as a pure arithmetic expression."""
+    try:
+        tree = ast.parse(expression, mode="eval")
+    except SyntaxError:
+        return False
+    allowed = (
+        ast.Expression,
+        ast.BinOp,
+        ast.UnaryOp,
+        ast.Constant,
+        ast.Add,
+        ast.Sub,
+        ast.Mult,
+        ast.Div,
+        ast.Pow,
+        ast.Mod,
+        ast.UAdd,
+        ast.USub,
+    )
+    for node in ast.walk(tree):
+        if not isinstance(node, allowed):
+            return False
+        if isinstance(node, ast.Constant) and not isinstance(node.value, (int, float)):
+            return False
+    return True
+
+
+# SQL keywords double as ordinary English verbs ("select the best option",
+# "create a summary"), so a bare keyword is not enough. Require the clause
+# structure that a real statement always carries.
+_SQL_STATEMENT_RE = re.compile(
+    r"(?is)\b("
+    r"select\b.+?\bfrom\b"
+    r"|with\b.+?\bas\b\s*\("
+    r"|insert\s+into\b"
+    r"|update\b.+?\bset\b"
+    r"|delete\s+from\b"
+    r"|create\s+(?:table|index|view|trigger)\b"
+    r"|drop\s+(?:table|index|view|trigger)\b"
+    r"|alter\s+table\b"
+    r").*"
+)
 
 
 def _extract_sql_statement(text: str) -> str | None:
-    match = re.search(
-        r"(?is)\b(select|with|insert|update|delete|create|drop|alter)\b.*",
-        text,
-    )
+    match = _SQL_STATEMENT_RE.search(text)
     if not match:
         return None
     statement = match.group(0).strip()
     statement = statement.strip("`\"'")
-    return statement
+    return statement or None
 
 
 def _is_read_only_sql(sql: str) -> bool:
@@ -206,15 +288,54 @@ def _extract_glob_pattern(text: str) -> str | None:
     return match.group(0)
 
 
+_FILE_EXTENSIONS = {
+    "txt",
+    "md",
+    "csv",
+    "tsv",
+    "json",
+    "jsonl",
+    "yaml",
+    "yml",
+    "toml",
+    "ini",
+    "cfg",
+    "conf",
+    "log",
+    "py",
+    "js",
+    "ts",
+    "tsx",
+    "jsx",
+    "html",
+    "htm",
+    "css",
+    "sql",
+    "sh",
+    "bat",
+    "ps1",
+    "xml",
+    "rst",
+    "db",
+    "sqlite",
+    "env",
+}
+
+
 def _extract_path_candidate(text: str) -> str | None:
-    # Basit dosya yolu tespiti: or. docs/a.txt, .\data\file.csv
-    match = re.search(
-        r"([A-Za-z0-9_\-./\\]+[.][A-Za-z0-9]{1,8})",
-        text,
-    )
-    if not match:
-        return None
-    return match.group(1)
+    """Detect a file path, e.g. docs/a.txt or .\\data\\file.csv.
+
+    A bare "name.number" (version 3.10, release 2.5) is not a path, so the
+    candidate must either contain a directory separator or end in a known
+    file extension.
+    """
+    for match in re.finditer(r"([A-Za-z0-9_\-./\\]+[.][A-Za-z0-9]{1,8})", text):
+        candidate = match.group(1)
+        extension = candidate.rsplit(".", 1)[-1].lower()
+        has_separator = "/" in candidate or "\\" in candidate
+        if extension in _FILE_EXTENSIONS or (has_separator and not extension.isdigit()):
+            return candidate
+    return None
 
 
 def _should_override_first_tool(

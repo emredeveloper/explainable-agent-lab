@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from .schemas import OrchestratorRunTrace, RunTrace
@@ -346,7 +346,12 @@ def _duration_ms(started_at_utc: str, finished_at_utc: str) -> int:
     try:
         started = datetime.fromisoformat(started_at_utc)
         finished = datetime.fromisoformat(finished_at_utc)
-    except ValueError:
+    except (TypeError, ValueError):
         return 0
+    # Traces written by older versions may carry naive timestamps; subtracting a
+    # naive and an aware datetime raises, so normalize both to UTC first.
+    if (started.tzinfo is None) != (finished.tzinfo is None):
+        started = started.replace(tzinfo=started.tzinfo or timezone.utc)
+        finished = finished.replace(tzinfo=finished.tzinfo or timezone.utc)
     delta = finished - started
     return max(int(delta.total_seconds() * 1000), 0)

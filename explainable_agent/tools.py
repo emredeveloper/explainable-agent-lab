@@ -11,6 +11,8 @@ from typing import Any
 
 ToolFn = Callable[[str, Path], str]
 TOOL_SCHEMA_VERSION = "tool-spec-v1"
+READ_ONLY_SQL_STATEMENTS = {"select", "with", "explain"}
+ALLOWED_WRITE_STATEMENTS = {"create", "insert", "update", "delete"}
 IGNORED_DIRS = {
     ".git",
     ".venv",
@@ -427,11 +429,20 @@ def sqlite_execute(sql_script: str, workspace_root: Path) -> str:
         return "ERROR: SQL statement is empty."
     if _is_read_only_sql(sql):
         return "ERROR: Use sqlite_query for read-only SQL."
-    first_token = _first_sql_token(sql)
-    if first_token not in {"create", "insert", "update", "delete"}:
-        return "ERROR: sqlite_execute only supports CREATE/INSERT/UPDATE/DELETE statements."
-    if first_token in {"attach", "detach"}:
-        return "ERROR: ATTACH/DETACH are not supported."
+
+    # The script is run via executescript(), so every statement must be checked.
+    # Validating only the leading token would let "INSERT ...; DROP TABLE x;"
+    # smuggle a destructive statement past the guard.
+    statements = _split_sql_statements(sql)
+    if not statements:
+        return "ERROR: SQL statement is empty."
+    for statement in statements:
+        token = _first_sql_token(statement)
+        if token not in ALLOWED_WRITE_STATEMENTS:
+            return (
+                "ERROR: sqlite_execute only supports CREATE/INSERT/UPDATE/DELETE "
+                f"statements (rejected: '{token or statement[:20]}')."
+            )
 
     try:
         db_path = _resolve_sqlite_db_path(workspace_root)
@@ -454,8 +465,87 @@ def _first_sql_token(sql: str) -> str:
     return tokens[0].lower() if tokens else ""
 
 
+def _strip_sql_comments(sql: str) -> str:
+    """Remove -- line comments and /* */ block comments outside string literals."""
+    out: list[str] = []
+    i = 0
+    length = len(sql)
+    quote: str | None = None
+    while i < length:
+        ch = sql[i]
+        if quote:
+            out.append(ch)
+            if ch == quote:
+                # Doubled quote is an escaped quote, not a terminator.
+                if i + 1 < length and sql[i + 1] == quote:
+                    out.append(sql[i + 1])
+                    i += 2
+                    continue
+                quote = None
+            i += 1
+            continue
+        if ch in {"'", '"', "`"}:
+            quote = ch
+            out.append(ch)
+            i += 1
+            continue
+        if ch == "-" and i + 1 < length and sql[i + 1] == "-":
+            while i < length and sql[i] != "\n":
+                i += 1
+            continue
+        if ch == "/" and i + 1 < length and sql[i + 1] == "*":
+            i += 2
+            while i + 1 < length and not (sql[i] == "*" and sql[i + 1] == "/"):
+                i += 1
+            i += 2
+            continue
+        out.append(ch)
+        i += 1
+    return "".join(out)
+
+
+def _split_sql_statements(sql: str) -> list[str]:
+    """Split a SQL script on semicolons that sit outside string literals."""
+    cleaned = _strip_sql_comments(sql)
+    statements: list[str] = []
+    current: list[str] = []
+    quote: str | None = None
+    i = 0
+    length = len(cleaned)
+    while i < length:
+        ch = cleaned[i]
+        if quote:
+            current.append(ch)
+            if ch == quote:
+                if i + 1 < length and cleaned[i + 1] == quote:
+                    current.append(cleaned[i + 1])
+                    i += 2
+                    continue
+                quote = None
+            i += 1
+            continue
+        if ch in {"'", '"', "`"}:
+            quote = ch
+            current.append(ch)
+            i += 1
+            continue
+        if ch == ";":
+            statement = "".join(current).strip()
+            if statement:
+                statements.append(statement)
+            current = []
+            i += 1
+            continue
+        current.append(ch)
+        i += 1
+    trailing = "".join(current).strip()
+    if trailing:
+        statements.append(trailing)
+    return statements
+
+
 def _is_read_only_sql(sql: str) -> bool:
-    return _first_sql_token(sql) in {"select", "with", "explain"}
+    return _first_sql_token(sql) in READ_ONLY_SQL_STATEMENTS
 
 
 def _connect_sqlite_read_only(db_path: Path) -> sqlite3.Connection:

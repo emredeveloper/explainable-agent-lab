@@ -64,19 +64,19 @@ def main() -> int:
             "explainable_agent/tools.py",
             "explainable_agent/openai_client.py",
         ],
-        "Adim 1: Sozdizimi Kontrolu",
+        "Step 1: Syntax Check",
     )
     if code != 0:
         failed = True
 
     code, out, _ = run_cmd(
         [PYTHON, "-m", "explainable_agent.cli", "--list-models"],
-        "Adim 2: Model Kontrolu",
+        "Step 2: Model Check",
     )
     if code != 0 or MODEL not in out:
-        print(f"HATA: '{MODEL}' modeli sunucu listesinde bulunamadi.")
+        print(f"FAILED: model '{MODEL}' was not found in the server list.")
         failed = True
-        print("\nSONUC: BASARISIZ (API baglantisi veya model yuklemesi gerekli)")
+        print("\nRESULT: FAILED (API connection or model loading required)")
         return 1
 
     code, out, _ = run_cmd(
@@ -93,20 +93,20 @@ def main() -> int:
             "--task",
             "calculate_math: (215*4)-12",
         ],
-        "Adim 3: Matematik Arac Gorevi",
+        "Step 3: Math Tool Task",
     )
     if code != 0 or "848" not in out:
-        print("HATA: matematik gorevi cikti metninde beklenen '848' yok.")
+        print("FAILED: expected '848' missing from the math task output.")
         failed = True
     trace = latest_trace_path()
     if not trace:
-        print("HATA: matematik gorevinden sonra trace.json uretilemedi.")
+        print("FAILED: trace.json was not produced after the math task.")
         failed = True
     elif not check_trace_has_tool_call(trace):
-        print(f"HATA: {trace} icinde tool_call + final_answer bekleniyordu.")
+        print(f"FAILED: expected tool_call + final_answer inside {trace}.")
         failed = True
     else:
-        print(f"BASARILI: trace aksiyonlari dogru ({trace})")
+        print(f"OK: trace actions are correct ({trace})")
 
     code, _, _ = run_cmd(
         [
@@ -122,24 +122,24 @@ def main() -> int:
             "--task",
             "list_workspace_files: .|*.py",
         ],
-        "Adim 4: Dosya Listeleme Arac Gorevi",
+        "Step 4: File Listing Tool Task",
     )
     if code != 0:
         failed = True
     trace = latest_trace_path()
     if not trace:
-        print("HATA: listeleme gorevinden sonra trace.json uretilemedi.")
+        print("FAILED: trace.json was not produced after the listing task.")
         failed = True
     elif not check_trace_has_tool_call(trace):
-        print(f"HATA: {trace} icinde tool_call + final_answer bekleniyordu.")
+        print(f"FAILED: expected tool_call + final_answer inside {trace}.")
         failed = True
     else:
-        print(f"BASARILI: trace aksiyonlari dogru ({trace})")
+        print(f"OK: trace actions are correct ({trace})")
 
     if failed:
-        print("\nSONUC: BASARISIZ")
+        print("\nRESULT: FAILED")
         return 1
-    print("\nSONUC: BASARILI")
+    print("\nRESULT: PASSED")
     return 0
 
 

@@ -57,12 +57,12 @@ def main() -> int:
 
     code, out, _ = run_cmd(
         [PYTHON, "-m", "explainable_agent.cli", "--list-models"],
-        "Adim 1: Model Kontrolu",
+        "Step 1: Model Check",
     )
     if code != 0 or MODEL not in out:
-        print(f"HATA: '{MODEL}' modeli sunucu listesinde bulunamadi.")
+        print(f"FAILED: model '{MODEL}' was not found in the server list.")
         failed = True
-        print("\nSONUC: BASARISIZ (API baglantisi veya model yuklemesi gerekli)")
+        print("\nRESULT: FAILED (API connection or model loading required)")
         return 1
 
     common = [
@@ -85,14 +85,14 @@ def main() -> int:
             "--task",
             "sqlite_init_demo",
         ],
-        "Adim 2: Demo SQLite Baslatma",
+        "Step 2: Demo SQLite Initialization",
     )
     trace = latest_trace_path()
     if code != 0 or not trace or not trace_has_sqlite_tool(trace):
-        print("HATA: baslatma adiminda sqlite araci kullanilmadi.")
+        print("FAILED: no sqlite tool was used in the initialization step.")
         failed = True
     else:
-        print(f"BASARILI: sqlite araci bulundu ({trace})")
+        print(f"OK: sqlite tool found ({trace})")
 
     code, _, _ = run_cmd(
         [
@@ -100,14 +100,14 @@ def main() -> int:
             "--task",
             "sqlite_list_tables",
         ],
-        "Adim 3: Tablo Listeleme",
+        "Step 3: Table Listing",
     )
     trace = latest_trace_path()
     if code != 0 or not trace or not trace_has_sqlite_tool(trace):
-        print("HATA: tablo listeleme adiminda sqlite araci kullanilmadi.")
+        print("FAILED: no sqlite tool was used in the table listing step.")
         failed = True
     else:
-        print(f"BASARILI: sqlite araci bulundu ({trace})")
+        print(f"OK: sqlite tool found ({trace})")
 
     code, out, _ = run_cmd(
         [
@@ -115,16 +115,16 @@ def main() -> int:
             "--task",
             "sqlite_query: SELECT name, city FROM customers ORDER BY id;",
         ],
-        "Adim 4: Okuma Sorgusu",
+        "Step 4: Read Query",
     )
     trace = latest_trace_path()
     if code != 0 or not trace or not trace_has_sqlite_tool(trace):
-        print("HATA: okuma sorgusu adiminda sqlite araci kullanilmadi.")
+        print("FAILED: no sqlite tool was used in the read query step.")
         failed = True
     else:
-        print(f"BASARILI: sqlite araci bulundu ({trace})")
+        print(f"OK: sqlite tool found ({trace})")
     if "Acme" not in out and "Istanbul" not in out:
-        print("UYARI: cikti demo satirlari (Acme/Istanbul) icermiyor.")
+        print("WARNING: output does not contain the demo rows (Acme/Istanbul).")
 
     code, _, _ = run_cmd(
         [
@@ -136,19 +136,19 @@ def main() -> int:
                 "FROM orders GROUP BY status ORDER BY status;"
             ),
         ],
-        "Adim 5: Toplulastirma Sorgusu",
+        "Step 5: Aggregation Query",
     )
     trace = latest_trace_path()
     if code != 0 or not trace or not trace_has_sqlite_tool(trace):
-        print("HATA: toplulastirma adiminda sqlite araci kullanilmadi.")
+        print("FAILED: no sqlite tool was used in the aggregation step.")
         failed = True
     else:
-        print(f"BASARILI: sqlite araci bulundu ({trace})")
+        print(f"OK: sqlite tool found ({trace})")
 
     if failed:
-        print("\nSONUC: BASARISIZ")
+        print("\nRESULT: FAILED")
         return 1
-    print("\nSONUC: BASARILI")
+    print("\nRESULT: PASSED")
     return 0
 
 

@@ -37,7 +37,9 @@ jobs:
         run: ruff format --check .
 
       - name: Tests
-        run: pytest -q --basetemp=.tmp/pytest
+        run: |
+          mkdir -p .tmp
+          pytest -q --basetemp=.tmp/pytest
 
       - name: Build package
         run: python -m build

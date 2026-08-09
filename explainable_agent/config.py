@@ -65,21 +65,59 @@ class Settings:
         if env_file.exists():
             for line in env_file.read_text(encoding="utf-8").splitlines():
                 line = line.strip()
+                if line.startswith("export "):
+                    line = line[len("export ") :].strip()
                 if line and not line.startswith("#") and "=" in line:
                     key, val = line.split("=", 1)
-                    if key not in os.environ:
-                        os.environ[key] = val.strip()
+                    key = key.strip()
+                    if key and key not in os.environ:
+                        os.environ[key] = _strip_quotes(val.strip())
 
         return cls(
             base_url=os.getenv("OPENAI_BASE_URL", "http://localhost:1234/v1"),
             api_key=os.getenv("OPENAI_API_KEY", "local"),
             requested_model=os.getenv("AGENT_MODEL", "gpt-oss-20b"),
             reasoning_effort=os.getenv("AGENT_REASONING_EFFORT", "high"),
-            max_steps=int(os.getenv("AGENT_MAX_STEPS", "6")),
+            max_steps=_env_int("AGENT_MAX_STEPS", 6),
             runs_dir=Path(os.getenv("AGENT_RUNS_DIR", "runs")).resolve(),
             workspace_root=Path(os.getenv("AGENT_WORKSPACE", ".")).resolve(),
-            temperature=float(os.getenv("AGENT_TEMPERATURE", "0.2")),
-            chaos_mode=os.getenv("AGENT_CHAOS_MODE", "false").lower() == "true",
-            use_native_tools=os.getenv("AGENT_NATIVE_TOOLS", "false").lower() == "true",
-            stream=os.getenv("AGENT_STREAM", "false").lower() == "true",
+            temperature=_env_float("AGENT_TEMPERATURE", 0.2),
+            chaos_mode=_env_bool("AGENT_CHAOS_MODE"),
+            use_native_tools=_env_bool("AGENT_NATIVE_TOOLS"),
+            stream=_env_bool("AGENT_STREAM"),
         )
+
+
+def _strip_quotes(value: str) -> str:
+    """Drop one layer of matching quotes, as dotenv-style parsers do."""
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
+        return value[1:-1]
+    return value
+
+
+def _env_bool(name: str) -> bool:
+    return os.getenv(name, "false").strip().lower() in {"true", "1", "yes", "on"}
+
+
+def _env_int(name: str, default: int) -> int:
+    raw = os.getenv(name)
+    if raw is None or not raw.strip():
+        return default
+    try:
+        return int(raw.strip())
+    except ValueError as exc:
+        raise ValueError(
+            f"Invalid integer for {name}: {raw!r}. Expected a whole number."
+        ) from exc
+
+
+def _env_float(name: str, default: float) -> float:
+    raw = os.getenv(name)
+    if raw is None or not raw.strip():
+        return default
+    try:
+        return float(raw.strip())
+    except ValueError as exc:
+        raise ValueError(
+            f"Invalid number for {name}: {raw!r}. Expected a decimal number."
+        ) from exc

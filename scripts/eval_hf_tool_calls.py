@@ -1033,7 +1033,7 @@ def main() -> int:
             cli_answer_path=args.answers,
         )
         if not answer_path.exists():
-            print(f"BFCL answer dosyasi bulunamadi: {answer_path}")
+            print(f"BFCL answer file not found: {answer_path}")
             return 1
         samples = load_bfcl_sql_samples(
             question_path=dataset_path,
@@ -1574,25 +1574,25 @@ def _build_actionable_plan(
 
     if name_acc < 0.8:
         actions.append(
-            "Tool adi secim hatasi yuksek: prompt'a yalnizca tool adini kopyalayip kullanma kurali ekle ve close-match otomatik duzeltmeyi acikca logla."
+            "High tool-name selection error: add a prompt rule to copy the tool name verbatim, and log close-match auto-corrections explicitly."
         )
     if count_acc < 0.8 or int(guard_metrics.get("dropped_by_max_tool_calls", 0)) > 0:
         actions.append(
-            "Tool sayisi hatasi var: max-tool-calls degerini dataset yapisina gore ayarla ve coklu-cagri gereken ornekleri ayri senaryoda degerlendir."
+            "Tool-count errors present: tune max-tool-calls to match the dataset structure, and evaluate samples that need multiple calls as a separate scenario."
         )
     if arg_rate < 0.75 or int(guard_metrics.get("missing_required_keys", 0)) > 0:
         actions.append(
-            "Arguman kalitesi dusuk: required alanlari once doldur sonra optional alanlari ekle seklinde iki adimli arguman olusturma kuralini zorunlu yap."
+            "Low argument quality: enforce a two-step argument construction rule — fill required fields first, then add optional ones."
         )
 
     if failure_patterns:
         top = failure_patterns[0]
         top_error = str(top.get("error_type", "unknown"))
-        pattern_action = f"En sik pattern `{top_error}`: bu pattern icin hedefli 10 orneklik mini regression seti olusturup her degisiklikte otomatik kos."
+        pattern_action = f"Most frequent pattern `{top_error}`: build a targeted 10-sample mini regression set for this pattern and run it automatically on every change."
 
     if int(guard_metrics.get("schema_validation_errors", 0)) > 0:
         actions.append(
-            "Schema ihlali goruluyor: schema-validator hatalarini model geri beslemesine tek satir neden olarak enjekte et."
+            "Schema violations observed: inject schema-validator errors back into the model feedback as a single-line reason."
         )
 
     # Keep output concise and realistic; always include top-pattern action when available.

@@ -391,22 +391,13 @@ The response should be short, clear, and in English."""
         error_analysis = payload.get("error_analysis")
         proposed_fix = payload.get("proposed_fix")
 
-        # Eğer error_analysis ve proposed_fix dolduysa ve action tool_call ama name eksikse,
-        # aracı doğrudan sqlite_describe_table olarak düzeltmeye çalışmak yerine modelden geleni kullansın,
-        # fakat name eksikse bir sorun var. Biz yine de action tool_call ama tool_name eksik durumunu final_answer'a çeviriyoruz.
-        # Aslında hatayı gördüyse ve çözüm sunduysa yeni bir tool call yapabilmeliydi.
-        # Eger hata analizini yazdiysa ve "action" = "tool_call" verdiyse ama "tool_name" unuttuysa
-        # veya "action" = "final_answer" verdi ama "tool_name" de verdiyse (ikincisi garip),
-        # biz her durumda asagidaki kontrolu yapiyoruz:
-        if error_analysis and proposed_fix and action == "final_answer":
-            # Model belki bir arac cagirmak istedi ama yanlislikla action'i final_answer birakti
-            # ya da "yeni arac belirtilmedi" mesajini yazdi.
-            # Eger tool_name verdiyse onu dinleyip tool_call'a cevirebiliriz:
-            if tool_name:
-                action = "tool_call"
-            else:
-                # Eger tool_name vermediyse model gercekten durmustur, bir sey yapamayiz.
-                pass
+        # Reconcile inconsistent self-healing responses. A model that diagnosed an
+        # error is expected to recover by calling another tool, but it often reports
+        # the diagnosis while leaving `action` on "final_answer". When it still named
+        # a tool, honour that tool and treat the response as a tool call; without a
+        # tool name there is nothing to recover with, so the answer stands as-is.
+        if error_analysis and proposed_fix and action == "final_answer" and tool_name:
+            action = "tool_call"
 
         if action == "tool_call" and not tool_name:
             action = "final_answer"

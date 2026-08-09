@@ -259,17 +259,6 @@ class TeamOrchestrator:
         )
 
 
-def _messages_to_prompt(messages: list[dict[str, str]]) -> str:
-    lines: list[str] = []
-    for msg in messages:
-        role = str(msg.get("role", "user")).upper()
-        content = str(msg.get("content", "")).strip()
-        if content:
-            lines.append(f"{role}:\n{content}")
-    lines.append("ASSISTANT:")
-    return "\n\n".join(lines)
-
-
 def _normalize_plan(
     raw_plan: list[object], valid_agents: set[str]
 ) -> list[dict[str, str]]:

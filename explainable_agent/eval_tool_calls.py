@@ -539,7 +539,10 @@ def _normalize_query_text(text: str) -> str:
         flags=re.UNICODE,
     )
     tokens = [tok for tok in cleaned.split() if tok]
+    # Search-intent filler words dropped before comparing queries. Turkish terms
+    # are included because eval prompts may be written in either language.
     stop = {
+        # Turkish
         "ara",
         "aramasi",
         "arama",
@@ -550,6 +553,7 @@ def _normalize_query_text(text: str) -> str:
         "internette",
         "icin",
         "için",
+        # English
         "the",
         "a",
         "an",
