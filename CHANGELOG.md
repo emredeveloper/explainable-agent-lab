@@ -1,5 +1,44 @@
 # Changelog
 
+## 0.3.2 - 2026-08-09
+
+### Added
+
+- **Actionable connection errors.** An unreachable server produced a bare
+  `Connection error.` naming neither the address tried nor how to change it.
+  A new `LLMConnectionError` (exported from `explainable_agent`) reports the
+  URL and the usual Ollama/LM Studio addresses. It subclasses `RuntimeError`,
+  so existing handlers keep working, and the decision-mode fallbacks re-raise
+  it instead of retrying against a server that is known to be down.
+- **Configurable network behaviour.** `Settings.request_timeout` (default 120s)
+  and `Settings.max_retries` (default 2), settable via `AGENT_REQUEST_TIMEOUT` /
+  `AGENT_MAX_RETRIES` or the new `--request-timeout` / `--max-retries` flags.
+  Previously a stalled server left the agent waiting on the SDK default of 600s
+  with no way to change it.
+- **`eval` extra** for the benchmark scripts: `pip install "explainable-agent[eval]"`.
+
+### Fixed
+
+- `duckduckgo_search` made an unbounded network call and could hang the agent
+  indefinitely; it now uses a 10s timeout, falling back gracefully when an older
+  `duckduckgo-search` build rejects the keyword.
+
+### Changed
+
+- `tenacity` and `pydantic` moved out of the core dependencies into the new
+  `eval` extra. Both are imported only by `scripts/eval_hf_tool_calls.py`, which
+  already guards the imports and degrades when they are absent. `jsonschema`,
+  which that script also imports but was never declared, is now listed there
+  too. **If you run the benchmark scripts, install `explainable-agent[eval]`.**
+
+### Documentation
+
+- Documented every CLI flag and environment variable. `--chaos`,
+  `--native-tools` and `--stream` had no README coverage, and chaos mode was
+  advertised in the feature list without showing how to run it. The options
+  table is cross-checked against the parser and its defaults against
+  `Settings.from_env()`.
+
 ## 0.3.1 - 2026-08-09
 
 ### Fixed
