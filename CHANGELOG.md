@@ -45,7 +45,7 @@
 - Promoted the package API for library use: exported trace dataclasses, tool helpers, tool registry, and artifact writers from `explainable_agent`.
 - Added `py.typed` packaging metadata so type checkers can treat the package as typed.
 - Added `ToolRegistry` for isolated per-agent tool catalogs while keeping the existing global `@define_tool` decorator backward compatible.
-- Hardened SQLite tools: read queries use a read-only connection with an authorizer, `PRAGMA` is no longer routed through `sqlite_query`, and `sqlite_execute` rejects destructive schema commands outside CREATE/INSERT/UPDATE/DELETE.
+- Hardened SQLite tools: read queries use a read-only connection with an authorizer, `PRAGMA` is no longer routed through `sqlite_query`, and `sqlite_execute` rejects destructive schema commands outside CREATE/INSERT/UPDATE/DELETE. (**Note:** the `sqlite_execute` guard checked only the first statement in a script and could be bypassed by chaining; fixed in 0.3.1.)
 - Tightened deterministic explicit tool calls so tool names only bypass the model when used in `tool_name:` or `/tool_name:` command form.
 - Improved orchestrator planning with schema-backed JSON retrieval, normalized delegation plans, and explicit diagnostics when no sub-agent tasks can run.
 - Reused the shared relaxed JSON parser inside the OpenAI-compatible client instead of maintaining duplicate parser logic.
