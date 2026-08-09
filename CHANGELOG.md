@@ -31,6 +31,14 @@
   which that script also imports but was never declared, is now listed there
   too. **If you run the benchmark scripts, install `explainable-agent[eval]`.**
 
+### Packaging
+
+- Declared PyPI classifiers, including explicit support for Python 3.10–3.14.
+  The package previously shipped with no classifiers at all.
+- CI now runs the matrix on 3.13 and 3.14 as well, so every version allowed by
+  `requires-python = ">=3.10"` is actually tested. The suite was verified
+  against real interpreters on 3.10, 3.11, 3.12, 3.13 and 3.14.
+
 ### Documentation
 
 - Documented every CLI flag and environment variable. `--chaos`,
