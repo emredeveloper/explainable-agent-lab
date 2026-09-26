@@ -95,3 +95,36 @@ def test_orchestrator_runs_valid_plan_and_synthesizes():
     assert len(trace.subtasks) == 1
     assert trace.final_synthesis == "synthesized"
     assert client.synthesis_calls == 1
+
+
+def test_dependent_subtask_receives_previous_result_separately():
+    received = []
+
+    class RecordingAgent:
+        def run(self, task, *, context=None):
+            received.append((task, context))
+            return _trace("AMBER-7391")
+
+    client = FakePlanClient(
+        {
+            "plan": [
+                {
+                    "agent_name": "worker",
+                    "assigned_task": "Find the code",
+                    "rationale": "lookup",
+                },
+                {
+                    "agent_name": "worker",
+                    "assigned_task": "Use the code",
+                    "rationale": "depends on lookup",
+                },
+            ]
+        }
+    )
+    trace = TeamOrchestrator(client, {"worker": ("test", RecordingAgent())}).run(
+        "Find and use the code", "m"
+    )
+    assert received[0] == ("Find the code", None)
+    assert received[1][0] == "Use the code"
+    assert "AMBER-7391" in received[1][1]
+    assert trace.subtasks[1].assigned_task == "Use the code"

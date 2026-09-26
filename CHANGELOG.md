@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+- Decode single tagged local-model tool calls using AST literal parsing; never
+  evaluate generated Python. Unsupported argument forms return an explicit error.
+- Pass prior team results as separate context to dependent agents.
+- Request streaming usage, count auxiliary completion usage, and preserve
+  connection errors without retrying through the non-streaming fallback.
+- Exclude errors from lexical support, remove alternative-answer disagreement as
+  positive evidence, and flag ungrounded currency symbols.
+- Count observed successful tool retries separately from recovery attempts.
+- Preserve empty tool registries, respect them in heuristic routing, and turn
+  custom tool exceptions into recoverable error results.
+- Add an opt-in live model check with isolated fixtures and saved traces.
+
 ## 0.3.2 - 2026-08-09
 
 ### Added

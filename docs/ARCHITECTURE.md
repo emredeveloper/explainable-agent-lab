@@ -15,7 +15,8 @@ This document describes the high-level architecture of **Explainable Agent Lab**
 - `explainable_agent/openai_client.py`
   - OpenAI-compatible client wrapper.
   - Builds structured decision prompts and parses model JSON into `Decision` objects.
-  - Provides alternative-answer queries for faithfulness checks and low-quality answer recovery.
+  - Tracks provider-reported token usage, provides alternative-answer recovery, and
+    tells the model to treat retrieved content as untrusted reference data.
 
 - `explainable_agent/tools.py`
   - Built-in tools and guards (file / SQLite / math / web).
@@ -50,7 +51,9 @@ This document describes the high-level architecture of **Explainable Agent Lab**
   - Normalizes heterogeneous JSON/JSONL datasets into a common internal schema.
 
 - `explainable_agent/json_utils.py`
-  - Robust JSON parsing utilities (`parse_json_object_relaxed`) with repair strategies.
+  - Normalizes JSON and common tagged, XML-like, and field-based decision formats
+    without evaluating model-generated code.
+  - Malformed tool-call syntax is surfaced as an explicit error instead of raw protocol text.
 
 ---
 
@@ -73,10 +76,11 @@ This document describes the high-level architecture of **Explainable Agent Lab**
      - `rationale`, `confidence`, `evidence`.
      - Optional `error_analysis` and `proposed_fix` fields for self-healing.
 
-3. **Heuristic override (first step only)**
-   - A heuristic layer examines the original task for:
-     - Explicit tool names (e.g., `calculate_math:`, `sqlite_init_demo:`).
-     - SQL, math expressions, glob patterns, or file paths.
+3. **Deterministic routing and heuristic override (first step only)**
+   - An explicitly named available tool (e.g., `calculate_math:`) is run
+     deterministically before the model loop.
+   - Otherwise, a heuristic layer examines the original task for SQL, math
+     expressions, glob patterns, or file paths.
    - If the first model decision conflicts with a strong signal, the agent may:
      - Override the tool choice or force a tool call instead of an early final answer.
 
@@ -84,6 +88,9 @@ This document describes the high-level architecture of **Explainable Agent Lab**
    - If `action == "tool_call"`:
      - The agent executes the selected tool via `run_tool` with workspace guards.
      - Tool output is stored in a `StepTrace`.
+     - Tool output and prior-agent context are presented as untrusted reference data;
+       common environment and private-key files are blocked by the built-in file reader.
+       Prompt rules reduce injection risk but are not a hard security boundary.
      - If chaos mode is enabled, synthetic errors may be injected for robustness testing.
 
 5. **Self-healing loop**
@@ -100,9 +107,11 @@ This document describes the high-level architecture of **Explainable Agent Lab**
      - If no final answer is produced within `max_steps`, a fallback path is used
        (regenerating from tools or via a direct alternative answer call).
    - Faithfulness check:
-     - Compares the final answer with an alternative answer from the model.
-     - Measures lexical similarity and a tool-support score to estimate whether
-       the answer is grounded in tool outputs.
+     - Uses lexical overlap with successful tool outputs to estimate support;
+       it does not establish semantic correctness.
+     - May record lexical similarity to an alternative answer, but that comparison
+       does not determine the faithfulness verdict.
+     - Flags explicit currency symbols absent from both the task and successful tool outputs.
    - Efficiency diagnostics:
      - Flags long tool outputs and multi-step paths that may harm performance.
 

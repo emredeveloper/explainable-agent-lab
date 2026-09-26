@@ -85,6 +85,32 @@ class RunTrace:
     faithfulness: FaithfulnessCheck
     errors: list[str] = field(default_factory=list)
     efficiency_diagnostics: list[str] = field(default_factory=list)
+    llm_usage: dict[str, int] | None = None
+
+    @property
+    def total_usage(self) -> dict[str, int]:
+        if self.llm_usage is not None:
+            return dict(self.llm_usage)
+        return {
+            key: sum(getattr(step, key) for step in self.steps)
+            for key in ("prompt_tokens", "completion_tokens", "total_tokens")
+        }
+
+    @property
+    def recovery_counts(self) -> dict[str, int]:
+        attempts = 0
+        successes = 0
+        pending_error = False
+        for step in self.steps:
+            if step.decision.action != "tool_call" or step.tool_output is None:
+                continue
+            failed = step.tool_output.startswith("ERROR:")
+            if pending_error:
+                attempts += 1
+                if not failed:
+                    successes += 1
+            pending_error = failed
+        return {"retry_attempts": attempts, "successful_retries": successes}
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -99,6 +125,8 @@ class RunTrace:
             "faithfulness": self.faithfulness.to_dict(),
             "errors": list(self.errors),
             "efficiency_diagnostics": list(self.efficiency_diagnostics),
+            "recovery_counts": self.recovery_counts,
+            "llm_usage": self.total_usage,
         }
 
 

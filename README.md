@@ -162,6 +162,11 @@ agent = ExplainableAgent(
 The stable public API exports `ExplainableAgent`, `Settings`, `ToolRegistry`,
 `ToolSpec`, `define_tool`, `run_tool`, trace dataclasses, and artifact writers.
 
+The decision layer normalizes JSON and common tagged, XML-like, and field-based
+responses into one internal format without branching on model names. Providers
+that cannot produce a supported decision format return a clear format error
+instead of leaking malformed tool-call text as the answer.
+
 Check out the `examples/` directory:
 - [`examples/basic_usage.py`](examples/basic_usage.py) - Small default smoke run using `.env`/CLI settings.
 - [`examples/custom_tool_usage.py`](examples/custom_tool_usage.py) - Register a custom Python tool and call it through the agent.
@@ -186,6 +191,36 @@ Use `--include-sqlite`, `--include-custom`, `--include-chaos`, or `--include-eva
 ---
 
 ## 📊 Evaluation & Custom Datasets
+
+### Live local regression checks
+
+From a repository checkout with Ollama running, exercise calculation, file-to-calculation, streaming usage,
+temporary and permanent tool failures, and dependent team tasks:
+
+```bash
+python scripts/live_ollama_check.py --model YOUR_INSTALLED_MODEL --repeat 2
+```
+
+This opt-in check creates an isolated fixture workspace under `runs/live-checks/`,
+saves raw traces and `summary.json`, and exits nonzero on a failed check. It does
+not download a model or contact external search services. Passing checks verify
+the specified outcomes, not every factual claim in a generated answer.
+
+`RunTrace.total_usage` includes provider-reported tokens from decision and
+auxiliary answer calls. Providers that omit usage still report zero; failed
+requests without usage cannot be counted. Use one client per concurrently running
+agent so usage snapshots do not overlap.
+
+Faithfulness is a **lexical evidence heuristic**, not a correctness guarantee.
+Alternative-answer disagreement no longer counts as positive evidence. Error
+outputs are excluded, and currency symbols absent from the task and successful
+tool results are flagged. Recovery counts distinguish attempts from successful
+tool retries; neither proves that the overall task is complete.
+
+Sequential team tasks receive earlier results through `agent.run(task, context=...)`.
+The context is separate from the task so explicit tool inputs are preserved.
+Custom `ExplainableAgent` subclasses overriding `run` should accept this optional
+keyword when used in a team.
 
 Evaluate your fine-tuned models or custom datasets easily. The pipeline parses messy outputs, repairs broken JSON, and generates actionable Markdown reports.
 
@@ -241,6 +276,7 @@ The agent comes with out-of-the-box tools ready to use:
 `duckduckgo_search`, `calculate_math`, `read_text_file`, `list_workspace_files`, `now_utc`, `sqlite_init_demo`, `sqlite_list_tables`, `sqlite_describe_table`, `sqlite_query`, `sqlite_execute`.
 
 `duckduckgo_search` remains the tool name in the API, while the underlying search dependency is provided by `ddgs`.
+The built-in file reader stays inside the configured workspace and blocks common `.env`, credential, and private-key files.
 
 ---
 *License: MIT | Current Release: v0.3.2*

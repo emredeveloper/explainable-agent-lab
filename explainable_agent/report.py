@@ -71,9 +71,9 @@ def write_orchestrator_artifacts(
 
         # Count steps and errors
         step_count = len(st.trace.steps)
-        error_count = len([s for s in st.trace.steps if s.decision.error_analysis])
+        recovery = st.trace.recovery_counts
         lines.append(
-            f"- **Sub-Agent Stats:** {step_count} steps taken, {error_count} self-healing events."
+            f"- **Sub-Agent Stats:** {step_count} steps taken, {recovery['retry_attempts']} recovery attempts, {recovery['successful_retries']} successful tool retries."
         )
         lines.append("")
 
@@ -179,6 +179,8 @@ def _to_compact_trace(trace: RunTrace) -> dict[str, object]:
         },
         "steps": steps,
         "errors": list(trace.errors),
+        "recovery_counts": trace.recovery_counts,
+        "llm_usage": trace.total_usage,
         "efficiency_diagnostics": list(trace.efficiency_diagnostics),
     }
 
@@ -250,9 +252,9 @@ def _to_markdown_report(trace: RunTrace) -> str:
                 f"- Tokens: prompt=`{step.prompt_tokens}`, completion=`{step.completion_tokens}`, total=`{step.total_tokens}`"
             )
         lines.append("")
-    total_prompt = sum(s.prompt_tokens for s in trace.steps)
-    total_completion = sum(s.completion_tokens for s in trace.steps)
-    total_all = sum(s.total_tokens for s in trace.steps)
+    total_prompt = trace.total_usage["prompt_tokens"]
+    total_completion = trace.total_usage["completion_tokens"]
+    total_all = trace.total_usage["total_tokens"]
     if total_all > 0:
         lines.append("## Token Usage Summary")
         lines.append("")
@@ -289,10 +291,15 @@ def _generate_diagnostics(trace: RunTrace) -> list[str]:
     suggestions: list[str] = []
 
     # 1. Self-Correction Success Analysis
+    recovery = trace.recovery_counts
+    if recovery["retry_attempts"]:
+        suggestions.append(
+            f"Recovery: {recovery['retry_attempts']} attempts, {recovery['successful_retries']} successful tool retries. Task completion must be checked separately."
+        )
     error_steps = [s for s in trace.steps if s.decision.error_analysis]
     if error_steps:
         suggestions.append(
-            f"Agent encountered an error {len(error_steps)} times and used self-correction ability."
+            f"Model supplied error analysis on {len(error_steps)} steps."
         )
         last_error = error_steps[-1]
         suggestions.append(
@@ -322,11 +329,11 @@ def _generate_diagnostics(trace: RunTrace) -> list[str]:
 
     # 4. Faithfulness Analysis
     if (
-        trace.faithfulness.tool_support_score > 0
+        any(s.decision.action == "tool_call" for s in trace.steps)
         and not trace.faithfulness.likely_faithful
     ):
         suggestions.append(
-            "FAITHFULNESS WARNING: Agent used the tool successfully but the final answer does not sufficiently overlap with the tool output (Hallucination risk). Add the rule 'Only use the data coming from the tool, do not add your own interpretation' to the prompt."
+            "FAITHFULNESS WARNING: The final answer has insufficient overlap with successful tool output. Review the evidence; lexical overlap alone cannot verify correctness."
         )
 
     # 5. Efficiency Diagnostics

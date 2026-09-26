@@ -22,6 +22,20 @@ IGNORED_DIRS = {
     "__pycache__",
     "runs",
 }
+SENSITIVE_FILE_SUFFIXES = {".key", ".pem", ".p12", ".pfx", ".jks", ".keystore"}
+SENSITIVE_FILE_NAMES = {
+    ".envrc",
+    ".netrc",
+    ".npmrc",
+    ".pypirc",
+    "credentials",
+    "credentials.json",
+    "id_dsa",
+    "id_ecdsa",
+    "id_ed25519",
+    "id_rsa",
+    "secrets.json",
+}
 
 
 @dataclass(frozen=True)
@@ -108,6 +122,19 @@ def _safe_resolve_path(workspace_root: Path, input_path: str) -> Path:
     return candidate
 
 
+def _is_sensitive_file(path: Path) -> bool:
+    name = path.name.casefold()
+    if name == ".env" or (
+        name.startswith(".env.")
+        and not name.endswith((".example", ".sample", ".template"))
+    ):
+        return True
+    return (
+        name in SENSITIVE_FILE_NAMES
+        or path.suffix.casefold() in SENSITIVE_FILE_SUFFIXES
+    )
+
+
 @define_tool(
     name="calculate_math",
     description="Calculates a basic arithmetic expression.",
@@ -164,6 +191,8 @@ def read_text_file(input_path: str, workspace_root: Path) -> str:
         return f"ERROR: file not found: {input_path}"
     if path.is_dir():
         return f"ERROR: path is a directory: {input_path}"
+    if _is_sensitive_file(Path(input_path.strip())) or _is_sensitive_file(path):
+        return "ERROR: reading common secret and private-key files is blocked."
 
     content = path.read_text(encoding="utf-8", errors="replace")
     max_chars = 4000
@@ -654,7 +683,7 @@ def _coerce_registry(
 ) -> Mapping[str, ToolSpec]:
     if isinstance(registry, ToolRegistry):
         return registry.specs
-    return registry or AVAILABLE_TOOLS
+    return AVAILABLE_TOOLS if registry is None else registry
 
 
 def tool_catalog_text(
@@ -711,4 +740,7 @@ def run_tool(
     spec = _coerce_registry(registry).get(tool_name)
     if not spec:
         return f"ERROR: unknown tool '{tool_name}'."
-    return spec.fn(tool_input or "", workspace_root)
+    try:
+        return spec.fn(tool_input or "", workspace_root)
+    except Exception as exc:  # noqa: BLE001
+        return f"ERROR: {type(exc).__name__}: {exc}"
